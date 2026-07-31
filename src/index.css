@@ -1,0 +1,360 @@
+@import url('https://fonts.googleapis.com/css2?family=Alex+Brush&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-cursive: "Alex Brush", cursive;
+
+  /* Custom Deep Royal Blue Palette matching the uploaded image */
+  --color-slate-950: var(--slate-950);
+  --color-slate-900: var(--slate-900);
+  --color-slate-800: var(--slate-800);
+  --color-slate-700: var(--slate-700);
+  --color-slate-600: var(--slate-600);
+  --color-slate-500: var(--slate-500);
+  --color-slate-400: var(--slate-400);
+  --color-slate-300: var(--slate-300);
+  --color-slate-200: var(--slate-200);
+  --color-slate-100: var(--slate-100);
+}
+
+:root {
+  /* Permanent Single Theme values (Deep Royal Blue / Navy matching the uploaded image and reference CSS) */
+  --slate-950: #182361;
+  --slate-900: #1f2d78;
+  --slate-800: #283895;
+  --slate-700: #354ac4;
+  --slate-600: #3e66fb;
+  --slate-500: #6172d5;
+  --slate-400: #889bd0;
+  --slate-300: #b4c2e6;
+  --slate-200: #cbd5e1;
+  --slate-100: #ffffff;
+
+  /* Reference CSS Theme Variables */
+  --bgPrimary: #283895;
+  --bgPrimaryHover: #212d79;
+  --bgThemeSpace: #1f2d78;
+  --bgThemeMainColor: #182361;
+  
+  --theme-bg-090D1A: #1f2d78;
+  --theme-bg-090D16: #283895;
+  --theme-bg-0C1224: #1f2d78;
+  --theme-bg-0A1121: #283895;
+  --theme-bg-12192c: #354ac4;
+  --theme-bg-060A14: #182361;
+  --theme-bg-121f66: #283895;
+  --theme-bg-0c154a: #283895;
+}
+
+/* Light Mode (Sophisticated Slate-White-Gray Theme) */
+.theme-light {
+  --slate-950: #ffffff;
+  --slate-900: #f8fafc;
+  --slate-800: #e2e8f0;
+  --slate-700: #cbd5e1;
+  --slate-600: #94a3b8;
+  --slate-500: #64748b;
+  --slate-400: #475569;
+  --slate-300: #334155;
+  --slate-200: #1e293b;
+  --slate-100: #0f172a;
+
+  --theme-bg-090D1A: #f8fafc;
+  --theme-bg-090D16: #ffffff;
+  --theme-bg-0C1224: #ffffff;
+  --theme-bg-0A1121: #f1f5f9;
+  --theme-bg-12192c: #cbd5e1;
+  --theme-bg-060A14: #e2e8f0;
+  --theme-bg-121f66: #e2e8f0;
+  --theme-bg-0c154a: #f1f5f9;
+}
+
+/* Orange/Amber Mode (Luxurious Warm Amber Theme) */
+.theme-orange {
+  --slate-950: #ffffff;
+  --slate-900: #faf7f4;
+  --slate-800: #f2ede7;
+  --slate-700: #e4dacd;
+  --slate-600: #cca585;
+  --slate-500: #8c6a4d;
+  --slate-400: #6b4d35;
+  --slate-300: #4e341f;
+  --slate-200: #332011;
+  --slate-100: #1d1006;
+
+  --theme-bg-090D1A: #faf7f4;
+  --theme-bg-090D16: #ffffff;
+  --theme-bg-0C1224: #ffffff;
+  --theme-bg-0A1121: #f4ece4;
+  --theme-bg-12192c: #e4dacd;
+  --theme-bg-060A14: #f2ede7;
+  --theme-bg-121f66: #e4dacd;
+  --theme-bg-0c154a: #f4ece4;
+}
+
+/* Green Mode (Deep Forest/Emerald Theme) */
+.theme-green {
+  --slate-950: #ffffff;
+  --slate-900: #f1faf6;
+  --slate-800: #e2f3ec;
+  --slate-700: #c2e6da;
+  --slate-600: #88bfab;
+  --slate-500: #529981;
+  --slate-400: #3a7360;
+  --slate-300: #255142;
+  --slate-200: #133127;
+  --slate-100: #071510;
+
+  --theme-bg-090D1A: #f1faf6;
+  --theme-bg-090D16: #ffffff;
+  --theme-bg-0C1224: #ffffff;
+  --theme-bg-0A1121: #e4f4ee;
+  --theme-bg-12192c: #c2e6da;
+  --theme-bg-060A14: #e2f3ec;
+  --theme-bg-121f66: #c2e6da;
+  --theme-bg-0c154a: #e4f4ee;
+}
+
+/* Dark Current Mode (Matches default Deep Royal Blue) */
+.theme-dark {
+  --slate-950: #182361;
+  --slate-900: #1f2d78;
+  --slate-800: #283895;
+  --slate-700: #354ac4;
+  --slate-600: #3e66fb;
+  --slate-500: #6172d5;
+  --slate-400: #889bd0;
+  --slate-300: #b4c2e6;
+  --slate-200: #cbd5e1;
+  --slate-100: #ffffff;
+
+  --theme-bg-090D1A: #1f2d78;
+  --theme-bg-090D16: #283895;
+  --theme-bg-0C1224: #1f2d78;
+  --theme-bg-0A1121: #283895;
+  --theme-bg-12192c: #354ac4;
+  --theme-bg-060A14: #182361;
+  --theme-bg-121f66: #283895;
+  --theme-bg-0c154a: #283895;
+}
+
+/* Navy Blue Mode (Sophisticated Deep Navy & Ice Blue Contrast) */
+.theme-navy {
+  --slate-950: #0b132b;
+  --slate-900: #1c2541;
+  --slate-800: #253053;
+  --slate-700: #3a4b7c;
+  --slate-600: #4e629e;
+  --slate-500: #6b82c4;
+  --slate-400: #8ea3de;
+  --slate-300: #b8c7f2;
+  --slate-200: #dce4f7;
+  --slate-100: #ffffff;
+
+  --theme-bg-090D1A: #0b132b;
+  --theme-bg-090D16: #111a36;
+  --theme-bg-0C1224: #1c2541;
+  --theme-bg-0A1121: #253053;
+  --theme-bg-12192c: #3a4b7c;
+  --theme-bg-060A14: #070d1d;
+  --theme-bg-121f66: #1d2c5e;
+  --theme-bg-0c154a: #162247;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--slate-950);
+  color: var(--slate-100);
+  overflow-x: hidden;
+}
+
+/* Direct standard Tailwind classes overridden to use custom CSS theme variables */
+.bg-slate-950 {
+  background-color: var(--slate-950) !important;
+}
+.bg-slate-900 {
+  background-color: var(--slate-900) !important;
+}
+.bg-slate-800 {
+  background-color: var(--slate-800) !important;
+}
+.bg-slate-700 {
+  background-color: var(--slate-700) !important;
+}
+.bg-slate-950\/90 {
+  background-color: color-mix(in srgb, var(--slate-950) 90%, transparent) !important;
+}
+.bg-slate-900\/50 {
+  background-color: color-mix(in srgb, var(--slate-900) 50%, transparent) !important;
+}
+.bg-slate-900\/40 {
+  background-color: color-mix(in srgb, var(--slate-900) 40%, transparent) !important;
+}
+
+.text-slate-100 {
+  color: var(--slate-100) !important;
+}
+.text-slate-200 {
+  color: var(--slate-200) !important;
+}
+.text-slate-300 {
+  color: var(--slate-300) !important;
+}
+.text-slate-400 {
+  color: var(--slate-400) !important;
+}
+.text-slate-500 {
+  color: var(--slate-500) !important;
+}
+.text-slate-600 {
+  color: var(--slate-600) !important;
+}
+
+.border-slate-850 {
+  border-color: color-mix(in srgb, var(--slate-900) 50%, var(--slate-800)) !important;
+}
+.border-slate-800 {
+  border-color: var(--slate-800) !important;
+}
+.border-slate-700 {
+  border-color: var(--slate-700) !important;
+}
+.border-slate-800\/80 {
+  border-color: color-mix(in srgb, var(--slate-800) 80%, transparent) !important;
+}
+.border-slate-800\/60 {
+  border-color: color-mix(in srgb, var(--slate-800) 60%, transparent) !important;
+}
+.border-slate-800\/40 {
+  border-color: color-mix(in srgb, var(--slate-800) 40%, transparent) !important;
+}
+.border-slate-700\/80 {
+  border-color: color-mix(in srgb, var(--slate-700) 80%, transparent) !important;
+}
+
+/* Light, Orange, and Green theme specific overrides for accents, text, and active states to guarantee high visibility */
+.theme-light, .theme-orange, .theme-green {
+  /* Let text-white become the dark slate text */
+  .text-white, text-white {
+    color: var(--slate-100) !important;
+  }
+  
+  /* Let text-slate-950 become theme's dark text (for buttons, etc.) */
+  .text-slate-950, .text-slate-950 {
+    color: var(--slate-100) !important;
+  }
+
+  /* Richer, darker accent colors for text elements in light mode for excellent AA readability */
+  .text-amber-400, .text-amber-500 {
+    color: #b45309 !important; /* amber-700 */
+  }
+  .text-emerald-400, .text-emerald-500 {
+    color: #15803d !important; /* emerald-700 */
+  }
+  .text-sky-400, .text-sky-500 {
+    color: #0369a1 !important; /* sky-700 */
+  }
+  .text-red-400, .text-red-500 {
+    color: #b91c1c !important; /* red-700 */
+  }
+
+  /* Ensure input text fields have dark text */
+  input, select, textarea {
+    color: var(--slate-100) !important;
+  }
+
+  /* Make sure links or secondary hover states remain dark/readable */
+  .hover\:text-white:hover {
+    color: var(--slate-100) !important;
+  }
+}
+
+/* CSS rules overriding Tailwind arbitrary background hex classes to enable dynamic theming */
+.bg-\[\#090D1A\], .bg-\[\#090d1a\] {
+  background-color: var(--theme-bg-090D1A) !important;
+}
+.bg-\[\#090D16\]\/90, .bg-\[\#090d16\]\/90 {
+  background-color: color-mix(in srgb, var(--theme-bg-090D16) 90%, transparent) !important;
+}
+.bg-\[\#0C1224\], .bg-\[\#0c1224\] {
+  background-color: var(--theme-bg-0C1224) !important;
+}
+.bg-\[\#0C1224\]\/80, .bg-\[\#0c1224\]\/80 {
+  background-color: color-mix(in srgb, var(--theme-bg-0C1224) 80%, transparent) !important;
+}
+.bg-\[\#0A1121\], .bg-\[\#0a1121\] {
+  background-color: var(--theme-bg-0A1121) !important;
+}
+.bg-\[\#12192C\], .bg-\[\#12192c\] {
+  background-color: var(--theme-bg-12192c) !important;
+}
+.bg-\[\#060A14\], .bg-\[\#060a14\] {
+  background-color: var(--theme-bg-060A14) !important;
+}
+.bg-\[\#090D1A\]\/60, .bg-\[\#090d1a\]\/60 {
+  background-color: color-mix(in srgb, var(--theme-bg-090D1A) 60%, transparent) !important;
+}
+.bg-\[\#090D1A\]\/50, .bg-\[\#090d1a\]\/50 {
+  background-color: color-mix(in srgb, var(--theme-bg-090D1A) 50%, transparent) !important;
+}
+.bg-\[\#121f66\]\/40, .bg-\[\#121F66\]\/40 {
+  background-color: color-mix(in srgb, var(--theme-bg-121f66) 40%, transparent) !important;
+}
+.bg-\[\#0c154a\]\/30, .bg-\[\#0C154A\]\/30 {
+  background-color: color-mix(in srgb, var(--theme-bg-0c154a) 30%, transparent) !important;
+}
+.bg-\[\#0c154a\]\/40, .bg-\[\#0C154A\]\/40 {
+  background-color: color-mix(in srgb, var(--theme-bg-0c154a) 40%, transparent) !important;
+}
+.bg-\[\#0c154a\]\/80, .bg-\[\#0C154A\]\/80 {
+  background-color: color-mix(in srgb, var(--theme-bg-0c154a) 80%, transparent) !important;
+}
+.bg-\[\#0c154a\], .bg-\[\#0C154A\] {
+  background-color: var(--theme-bg-0c154a) !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}

@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role, wallet balance, and status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "fullName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLogin": { "type": "string" },
+        "status": { "type": "string" },
+        "walletBalance": { "type": "number" }
+      },
+      "required": ["id", "username", "email", "role", "fullName", "createdAt", "status"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Top-up requests and balance adjustments via UPI or Wire",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentGateway": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentSlipUrl": { "type": "string" },
+        "upiTransactionId": { "type": "string" },
+        "notes": { "type": "string" },
+        "adminFeedback": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "username", "userEmail", "amount", "paymentGateway", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/user_profiles/{document}": {
+      "schema": "UserProfile",
+      "description": "Collection of user details and billing parameters"
+    },
+    "/wallet_transactions/{document}": {
+      "schema": "WalletTransaction",
+      "description": "Collection of wallet financial ledgers"
+    }
+  }
+}
