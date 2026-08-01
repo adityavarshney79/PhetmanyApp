@@ -81,8 +81,47 @@ export default function AdminDashboard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      setDbTestResultData(data);
+
+      const contentType = res.headers.get('content-type') || '';
+      const text = await res.text();
+
+      // If response is HTML (e.g. index.html served by static Apache web server on Hostinger)
+      if (text.trim().toLowerCase().startsWith('<!doctype') || text.trim().toLowerCase().startsWith('<html') || contentType.includes('text/html')) {
+        setDbTestResultData({
+          success: false,
+          message: 'Hostinger Web Server Returned HTML Instead of API JSON',
+          error: {
+            code: 'HOSTINGER_NODEJS_SERVER_NOT_RUNNING',
+            message: 'The /api/test-db-connection route returned index.html (<!DOCTYPE html>...). This means the Node.js Express server (server.ts / dist/server.cjs) is NOT currently running on Hostinger, so requests are hitting static Apache/Nginx instead of Node.js.',
+          },
+          suggestions: [
+            '1. On Hostinger hPanel, go to "Setup Node.js App" (or Cloud/VPS Terminal).',
+            '2. Create/Enable a Node.js Application with entry point set to "dist/server.cjs" or "server.ts".',
+            '3. Make sure to run "npm run build" so "dist/server.cjs" and "dist/index.html" are generated.',
+            '4. In Hostinger "Node.js App Manager", set Environment Variables: DB_HOST=localhost, DB_USER=u513407224_phetmany, DB_PASSWORD=..., DB_NAME=u513407224_phetmany.',
+            '5. Click "Start App" in Hostinger hPanel to run the backend server.',
+          ],
+        });
+        return;
+      }
+
+      try {
+        const data = JSON.parse(text);
+        setDbTestResultData(data);
+      } catch (parseErr: any) {
+        setDbTestResultData({
+          success: false,
+          message: 'Invalid JSON Response Received from Backend',
+          error: {
+            code: 'INVALID_JSON_RESPONSE',
+            message: parseErr.message || 'Failed to parse JSON response',
+          },
+          suggestions: [
+            'Check server logs to ensure server.ts is returning valid JSON.',
+            'Verify server environment on Hostinger.',
+          ],
+        });
+      }
     } catch (err: any) {
       setDbTestResultData({
         success: false,
@@ -92,7 +131,7 @@ export default function AdminDashboard({
           message: err.message || String(err),
         },
         suggestions: [
-          'Verify that server.ts is running on port 3000.',
+          'Verify that server.ts / node dist/server.cjs is running on port 3000 on Hostinger.',
           'Check browser developer tools console for network error details.',
         ],
       });
