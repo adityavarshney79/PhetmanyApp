@@ -6,10 +6,11 @@ import {
   Upload, Check, ChevronLeft, ChevronRight, LayoutGrid, List, Percent,
   BarChart3, PieChart, ShoppingBag, ShoppingCart, Ban, ArrowUpRight, ArrowDownRight, Tag,
   ExternalLink, Database, KeyRound, FileSpreadsheet, Wallet, Palette, Menu,
-  Server, Wifi, WifiOff, Terminal
+  Server, Wifi, WifiOff, Terminal, Flame
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_DETAILS, Product, Order, SupportTicket, WalletTransaction } from '../types';
 import ThemeSelector from './ThemeSelector';
+import FirestoreConnectionTest from './FirestoreConnectionTest';
 import { 
   getProducts, saveProducts, getOrders, saveOrders, getTickets, addTicketMessage, saveTickets,
   fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb,
@@ -52,7 +53,7 @@ interface AdminDashboardProps {
 export default function AdminDashboard({ 
   currentUser, onUpdateCurrentUser, users, onAddUser, onUpdateUser, onDeleteUser, onRefreshUsers, logoUrl, onLogout, theme, setTheme
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'markup' | 'orders' | 'shipment' | 'affiliate' | 'analytics' | 'support' | 'rapnet' | 'wallet' | 'theme_menu' | 'db_connection'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'markup' | 'orders' | 'shipment' | 'affiliate' | 'analytics' | 'support' | 'rapnet' | 'wallet' | 'theme_menu' | 'db_connection' | 'firestore_connection'>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   
   // Database Connection Diagnostics States
@@ -1569,13 +1570,32 @@ export default function AdminDashboard({
                   <span>rapnet api</span>
                 </button>
 
-                <button 
-                  onClick={() => { setActiveTab('db_connection'); setIsMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
-                >
-                  <Server className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Database Connection</span>
-                </button>
+                <div className="pt-2 border-t border-slate-800 my-2">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-3.5 block mb-1">
+                    Database Connections
+                  </span>
+
+                  <button 
+                    onClick={() => { setActiveTab('db_connection'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
+                  >
+                    <Server className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>MySQL Connection</span>
+                  </button>
+
+                  <button 
+                    onClick={() => { setActiveTab('firestore_connection'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'firestore_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Firestore Database</span>
+                    </div>
+                    <span className="text-[8px] font-mono text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded font-bold">
+                      ai-studio
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1721,13 +1741,33 @@ export default function AdminDashboard({
                 Rapaport API Suite
               </button>
 
-              <button 
-                onClick={() => setActiveTab('db_connection')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
-              >
-                <Server className="w-4 h-4 text-emerald-400" />
-                Database Connection
-              </button>
+              {/* Database Connections Submenu Group */}
+              <div className="pt-2 border-t border-slate-800 my-2 space-y-1">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-4 block mb-1">
+                  Database Connections
+                </span>
+                
+                <button 
+                  onClick={() => setActiveTab('db_connection')}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
+                >
+                  <Server className="w-4 h-4 text-emerald-400" />
+                  <span>MySQL Database</span>
+                </button>
+
+                <button 
+                  onClick={() => setActiveTab('firestore_connection')}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'firestore_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Flame className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span>Firestore Database</span>
+                  </div>
+                  <span className="bg-amber-500/20 text-amber-400 text-[8px] font-mono px-1.5 py-0.5 rounded font-bold">
+                    Test
+                  </span>
+                </button>
+              </div>
             </nav>
           </div>
 
@@ -7550,8 +7590,12 @@ export default function AdminDashboard({
             </div>
           )}
 
-        </main>
+          {/* Firestore Connection Diagnostic Page */}
+          {activeTab === 'firestore_connection' && (
+            <FirestoreConnectionTest defaultDatabaseId="ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b" />
+          )}
 
+        </main>
       </div>
     </div>
   );
