@@ -1,6 +1,22 @@
 import { UserProfile } from '../types';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  getDoc 
+} from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
 
-// Hostinger MySQL user profile service
+// Target Firestore Database ID
+export const TARGET_DATABASE_ID = 'ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b';
+
+// Initialize Firebase App and Firestore Instance with specified Database ID
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const firestoreDb = getFirestore(app, TARGET_DATABASE_ID);
 
 const SEED_USERS: UserProfile[] = [
   {
@@ -102,7 +118,51 @@ function setLocalUsers(users: UserProfile[]) {
   localStorage.setItem('phetmany_user_profiles', JSON.stringify(users));
 }
 
+// Background sync to Secondary Connection (Hostinger MySQL API)
+async function syncUserToSecondaryDb(profile: UserProfile): Promise<void> {
+  try {
+    await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile)
+    });
+  } catch (err) {
+    console.warn('Hostinger MySQL secondary sync notice:', err);
+  }
+}
+
+async function syncUserDeleteToSecondaryDb(id: string): Promise<void> {
+  try {
+    await fetch(`/api/users/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('Hostinger MySQL secondary delete notice:', err);
+  }
+}
+
+// 1. Get All Users (Primary: Firestore)
 export async function getAllUsers(): Promise<UserProfile[]> {
+  try {
+    const usersCol = collection(firestoreDb, 'user_profiles');
+    const snapshot = await getDocs(usersCol);
+    if (!snapshot.empty) {
+      const users: UserProfile[] = snapshot.docs.map(doc => doc.data() as UserProfile);
+      setLocalUsers(users);
+      return users;
+    }
+
+    // Seed Firestore if collection is empty
+    console.log(`Firestore user_profiles empty. Seeding initial users into ${TARGET_DATABASE_ID}...`);
+    for (const u of SEED_USERS) {
+      await setDoc(doc(firestoreDb, 'user_profiles', u.id), u);
+      syncUserToSecondaryDb(u);
+    }
+    setLocalUsers(SEED_USERS);
+    return SEED_USERS;
+  } catch (error) {
+    console.warn('Firestore user_profiles fetch failed, trying secondary Hostinger MySQL fallback:', error);
+  }
+
+  // Secondary Fallback: Hostinger MySQL API
   try {
     const res = await fetch('/api/users');
     if (res.ok) {
@@ -111,37 +171,39 @@ export async function getAllUsers(): Promise<UserProfile[]> {
         setLocalUsers(users);
         return users;
       }
-      // Seed Hostinger MySQL database if empty
-      console.log('MySQL users empty. Seeding initial users...');
-      for (const u of SEED_USERS) {
-        await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(u)
-        }).catch(() => {});
-      }
-      return SEED_USERS;
     }
   } catch (error) {
-    console.warn('MySQL user fetch error, using local fallback:', error);
+    console.warn('MySQL user fetch error:', error);
   }
+
   return getLocalUsers();
 }
 
+// 2. Get Single User Profile
 export async function getUserProfile(id: string): Promise<UserProfile | null> {
+  try {
+    const userDocRef = doc(firestoreDb, 'user_profiles', id);
+    const docSnap = await getDoc(userDocRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as UserProfile;
+    }
+  } catch (error) {
+    console.warn('Firestore getUserProfile error:', error);
+  }
+
+  // Secondary Fallback: Hostinger MySQL
   try {
     const res = await fetch(`/api/users/${id}`);
     if (res.ok) {
-      const user = await res.json();
-      return user;
+      return await res.json();
     }
-  } catch (error) {
-    console.warn('MySQL getUserProfile error:', error);
-  }
+  } catch (error) {}
+
   const local = getLocalUsers();
   return local.find(u => u.id === id) || null;
 }
 
+// 3. Create User Profile (Primary: Firestore, Secondary: Hostinger MySQL)
 export async function createUserProfile(profile: UserProfile): Promise<UserProfile> {
   const local = getLocalUsers();
   const existingIndex = local.findIndex(u => u.id === profile.id || u.username.toLowerCase() === profile.username.toLowerCase());
@@ -152,18 +214,20 @@ export async function createUserProfile(profile: UserProfile): Promise<UserProfi
   }
   setLocalUsers(local);
 
+  // Primary: Firestore
   try {
-    await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profile)
-    });
+    await setDoc(doc(firestoreDb, 'user_profiles', profile.id), profile);
   } catch (error) {
-    console.error('MySQL createUserProfile failed:', error);
+    console.error('Firestore createUserProfile failed:', error);
   }
+
+  // Secondary: Hostinger MySQL API
+  syncUserToSecondaryDb(profile);
+
   return profile;
 }
 
+// 4. Update User Profile
 export async function updateUserProfile(id: string, updates: Partial<UserProfile>): Promise<void> {
   const local = getLocalUsers();
   const index = local.findIndex(u => u.id === id);
@@ -172,29 +236,40 @@ export async function updateUserProfile(id: string, updates: Partial<UserProfile
     updatedUser = { ...local[index], ...updates };
     local[index] = updatedUser;
     setLocalUsers(local);
+  } else {
+    const existing = await getUserProfile(id);
+    if (existing) {
+      updatedUser = { ...existing, ...updates };
+    }
   }
 
   if (updatedUser) {
+    // Primary: Firestore
     try {
-      await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedUser)
-      });
+      await setDoc(doc(firestoreDb, 'user_profiles', id), updatedUser, { merge: true });
     } catch (error) {
-      console.error('MySQL updateUserProfile failed:', error);
+      console.error('Firestore updateUserProfile failed:', error);
     }
+
+    // Secondary: Hostinger MySQL API
+    syncUserToSecondaryDb(updatedUser);
   }
 }
 
+// 5. Delete User Profile
 export async function deleteUserProfile(id: string): Promise<void> {
   const local = getLocalUsers();
   const filtered = local.filter(u => u.id !== id);
   setLocalUsers(filtered);
 
+  // Primary: Firestore
   try {
-    await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    await deleteDoc(doc(firestoreDb, 'user_profiles', id));
   } catch (error) {
-    console.error('MySQL deleteUserProfile failed:', error);
+    console.error('Firestore deleteUserProfile failed:', error);
   }
+
+  // Secondary: Hostinger MySQL
+  syncUserDeleteToSecondaryDb(id);
 }
+

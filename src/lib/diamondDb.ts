@@ -1,4 +1,13 @@
 import { Product, Order, SupportTicket } from '../types';
+import { firestoreDb } from './firebase';
+import { 
+  collection, 
+  doc, 
+  getDocs, 
+  setDoc, 
+  deleteDoc, 
+  writeBatch 
+} from 'firebase/firestore';
 
 const INITIAL_PRODUCTS: Product[] = [
   {
@@ -714,11 +723,89 @@ export function clearLocalProductCache(): void {
 // Clear any existing cached products on load
 clearLocalProductCache();
 
-// --- Asynchronous Database Operations (Hostinger MySQL primary) ---
+// --- Asynchronous Database Operations (Primary: Firestore Database ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b, Secondary: Hostinger MySQL API) ---
 
-// PRODUCTS
+// Helper: Secondary Sync functions for Hostinger MySQL API
+async function syncProductToSecondaryDb(product: Product): Promise<void> {
+  try {
+    await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    });
+  } catch (err) {
+    console.warn('Hostinger MySQL secondary sync notice:', err);
+  }
+}
+
+async function syncProductsBatchToSecondaryDb(productsChunk: Product[]): Promise<void> {
+  try {
+    await fetch('/api/products/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products: productsChunk })
+    });
+  } catch (err) {
+    console.warn('Hostinger MySQL secondary batch sync notice:', err);
+  }
+}
+
+async function syncProductDeleteToSecondaryDb(id: string): Promise<void> {
+  try {
+    await fetch(`/api/products/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    console.warn('Hostinger MySQL secondary delete notice:', err);
+  }
+}
+
+async function syncOrderToSecondaryDb(order: Order): Promise<void> {
+  try {
+    await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order)
+    });
+  } catch (err) {}
+}
+
+async function syncTicketToSecondaryDb(ticket: SupportTicket): Promise<void> {
+  try {
+    await fetch('/api/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ticket)
+    });
+  } catch (err) {}
+}
+
+// PRODUCTS (Primary: Firestore, Secondary: Hostinger MySQL)
 export async function fetchProductsFromDb(): Promise<Product[]> {
-  // 1. Primary: Hostinger MySQL API Endpoint
+  // 1. Primary: Firestore Collection "products"
+  try {
+    const productsCol = collection(firestoreDb, 'products');
+    const snapshot = await getDocs(productsCol);
+    if (!snapshot.empty) {
+      const list: Product[] = snapshot.docs.map(d => d.data() as Product);
+      cachedProducts = list;
+      try {
+        if (list.length <= 1000) {
+          localStorage.setItem('phetmany_products', JSON.stringify(list));
+        }
+      } catch (e) {}
+      await saveProductsToIndexedDB(list);
+      return list;
+    }
+
+    // Seed Firestore if products collection is empty
+    console.log('Firestore products collection empty. Seeding initial products...');
+    await saveProductsToDbInBatches(INITIAL_PRODUCTS);
+    cachedProducts = INITIAL_PRODUCTS;
+    return INITIAL_PRODUCTS;
+  } catch (e) {
+    console.warn("Firestore fetch products error, trying Hostinger MySQL secondary connection:", e);
+  }
+
+  // 2. Secondary Fallback: Hostinger MySQL API Endpoint
   try {
     const res = await fetch('/api/products');
     if (res.ok) {
@@ -738,7 +825,7 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
     console.warn("MySQL API fetch products error:", e);
   }
 
-  // 2. Fallback to local IndexedDB or initial products
+  // 3. Fallback to local IndexedDB or initial products
   const dbList = await getProductsFromIndexedDB();
   if (dbList.length > 0) {
     cachedProducts = dbList;
@@ -784,16 +871,20 @@ export async function saveProductsToDbInBatches(
   for (let i = 0; i < total; i += batchSize) {
     const chunk = productsToSave.slice(i, i + batchSize);
 
-    // Primary: Save directly to Hostinger MySQL API
+    // 1. Primary: Save directly to Firestore using writeBatch
     try {
-      await fetch('/api/products/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: chunk })
-      });
+      const batch = writeBatch(firestoreDb);
+      for (const prod of chunk) {
+        const docRef = doc(firestoreDb, 'products', prod.id);
+        batch.set(docRef, prod);
+      }
+      await batch.commit();
     } catch (err) {
-      console.warn('MySQL batch save error:', err);
+      console.warn('Firestore batch save error:', err);
     }
+
+    // 2. Secondary: Sync to Hostinger MySQL API in background
+    syncProductsBatchToSecondaryDb(chunk);
 
     current += chunk.length;
     if (onProgress) {
@@ -806,18 +897,40 @@ export async function saveProductsToDbInBatches(
 export const saveProductsToFirestoreInBatches = saveProductsToDbInBatches;
 
 export async function deleteProductFromDb(id: string): Promise<void> {
+  // 1. Primary: Delete from Firestore
   try {
-    await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    await deleteDoc(doc(firestoreDb, 'products', id));
   } catch (error) {
-    console.error("Failed to delete product from MySQL:", error);
+    console.error("Failed to delete product from Firestore:", error);
   }
+
+  // 2. Secondary: Delete from Hostinger MySQL
+  syncProductDeleteToSecondaryDb(id);
 }
 
 // Backward compatibility alias
 export const deleteProductFromFirestore = deleteProductFromDb;
 
-// ORDERS
+// ORDERS (Primary: Firestore, Secondary: Hostinger MySQL)
 export async function fetchOrdersFromDb(): Promise<Order[]> {
+  try {
+    const ordersCol = collection(firestoreDb, 'orders');
+    const snapshot = await getDocs(ordersCol);
+    if (!snapshot.empty) {
+      const list: Order[] = snapshot.docs.map(d => d.data() as Order);
+      localStorage.setItem('phetmany_orders', JSON.stringify(list));
+      return list;
+    }
+
+    // Seed Firestore if empty
+    console.log('Firestore orders empty. Seeding initial orders...');
+    await saveOrdersToDb(INITIAL_ORDERS);
+    return INITIAL_ORDERS;
+  } catch (e) {
+    console.warn("Firestore fetch orders error, trying Hostinger MySQL:", e);
+  }
+
+  // Secondary: Hostinger MySQL
   try {
     const res = await fetch('/api/orders');
     if (res.ok) {
@@ -838,24 +951,42 @@ export async function fetchOrdersFromDb(): Promise<Order[]> {
 export const fetchOrdersFromFirestore = fetchOrdersFromDb;
 
 export async function saveOrdersToDb(orders: Order[]): Promise<void> {
-  try {
-    await Promise.all(
-      orders.map(o =>
-        fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(o)
-        }).catch(() => {})
-      )
-    );
-  } catch (error) {}
+  for (const o of orders) {
+    // Primary: Firestore
+    try {
+      await setDoc(doc(firestoreDb, 'orders', o.id), o);
+    } catch (e) {
+      console.warn('Firestore save order error:', e);
+    }
+
+    // Secondary: Hostinger MySQL
+    syncOrderToSecondaryDb(o);
+  }
 }
 
 // Backward compatibility alias
 export const saveOrdersToFirestore = saveOrdersToDb;
 
-// TICKETS
+// TICKETS (Primary: Firestore, Secondary: Hostinger MySQL)
 export async function fetchTicketsFromDb(): Promise<SupportTicket[]> {
+  try {
+    const ticketsCol = collection(firestoreDb, 'tickets');
+    const snapshot = await getDocs(ticketsCol);
+    if (!snapshot.empty) {
+      const list: SupportTicket[] = snapshot.docs.map(d => d.data() as SupportTicket);
+      localStorage.setItem('phetmany_tickets', JSON.stringify(list));
+      return list;
+    }
+
+    // Seed Firestore if empty
+    console.log('Firestore tickets empty. Seeding initial support tickets...');
+    await saveTicketsToDb(INITIAL_TICKETS);
+    return INITIAL_TICKETS;
+  } catch (e) {
+    console.warn("Firestore fetch tickets error, trying Hostinger MySQL:", e);
+  }
+
+  // Secondary: Hostinger MySQL
   try {
     const res = await fetch('/api/tickets');
     if (res.ok) {
@@ -874,17 +1005,17 @@ export async function fetchTicketsFromDb(): Promise<SupportTicket[]> {
 export const fetchTicketsFromFirestore = fetchTicketsFromDb;
 
 export async function saveTicketsToDb(tickets: SupportTicket[]): Promise<void> {
-  try {
-    await Promise.all(
-      tickets.map(t =>
-        fetch('/api/tickets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(t)
-        }).catch(() => {})
-      )
-    );
-  } catch (error) {}
+  for (const t of tickets) {
+    // Primary: Firestore
+    try {
+      await setDoc(doc(firestoreDb, 'tickets', t.id), t);
+    } catch (e) {
+      console.warn('Firestore save ticket error:', e);
+    }
+
+    // Secondary: Hostinger MySQL
+    syncTicketToSecondaryDb(t);
+  }
 }
 
 // Backward compatibility alias
