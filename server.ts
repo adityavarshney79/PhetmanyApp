@@ -14,12 +14,12 @@ app.use(express.json({ limit: '50mb' }));
 
 // Hostinger MySQL Connection Pool
 const dbConfig = {
-  host: process.env.DB_HOST && process.env.DB_HOST !== '193.203.184.233' ? process.env.DB_HOST : 'srv1085.hstgr.io',
-  user: process.env.DB_USER && process.env.DB_USER !== 'u513407224_aditya' ? process.env.DB_USER : 'u513407224_phetmany',
-  password: process.env.DB_PASSWORD && process.env.DB_PASSWORD !== '6e>Lq1Qs~7N' ? process.env.DB_PASSWORD : 'India@1234#@$$',
-  database: process.env.DB_NAME && process.env.DB_NAME !== 'u513407224_phetmanyapp' ? process.env.DB_NAME : 'u513407224_phetmany',
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'u513407224_phetmany',
+  password: process.env.DB_PASSWORD || 'India@1234#@$$',
+  database: process.env.DB_NAME || 'u513407224_phetmany',
   port: parseInt(process.env.DB_PORT || '3306', 10),
-  connectTimeout: 8000,
+  connectTimeout: 10000,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -180,6 +180,133 @@ app.get('/api/health', async (_req, res) => {
       user: dbConfig.user,
     },
   });
+});
+
+// Comprehensive Database Connection Diagnostic API
+app.all('/api/test-db-connection', async (req, res) => {
+  const host = (req.body?.host || req.query?.host || dbConfig.host || 'localhost').trim();
+  const user = (req.body?.user || req.query?.user || dbConfig.user || 'u513407224_phetmany').trim();
+  const password = req.body?.password !== undefined ? req.body.password : (req.query?.password !== undefined ? req.query.password : dbConfig.password);
+  const database = (req.body?.database || req.query?.database || dbConfig.database || 'u513407224_phetmany').trim();
+  const port = parseInt(String(req.body?.port || req.query?.port || dbConfig.port || '3306'), 10);
+
+  const testConfig = {
+    host,
+    user,
+    password,
+    database,
+    port,
+    connectTimeout: 8000,
+  };
+
+  const maskedConfig = {
+    host,
+    user,
+    database,
+    port,
+    passwordMasked: password ? '••••••••' : '(empty)',
+  };
+
+  let connection: mysql.Connection | null = null;
+  const startTime = Date.now();
+
+  try {
+    connection = await mysql.createConnection(testConfig);
+    const connectionTimeMs = Date.now() - startTime;
+
+    // Run test queries
+    const [pingRows]: any = await connection.query('SELECT 1 as pingVal, NOW() as serverTime, VERSION() as mysqlVersion');
+    const [tableRows]: any = await connection.query('SHOW TABLES');
+
+    const tableNameKey = tableRows.length > 0 ? Object.keys(tableRows[0])[0] : null;
+    const tablesList: string[] = tableNameKey ? tableRows.map((r: any) => r[tableNameKey]) : [];
+
+    let productCount = 0;
+    let orderCount = 0;
+    let ticketCount = 0;
+    let userCount = 0;
+
+    if (tablesList.includes('products')) {
+      const [pRows]: any = await connection.query('SELECT COUNT(*) as cnt FROM products');
+      productCount = pRows[0]?.cnt || 0;
+    }
+    if (tablesList.includes('orders')) {
+      const [oRows]: any = await connection.query('SELECT COUNT(*) as cnt FROM orders');
+      orderCount = oRows[0]?.cnt || 0;
+    }
+    if (tablesList.includes('tickets')) {
+      const [tRows]: any = await connection.query('SELECT COUNT(*) as cnt FROM tickets');
+      ticketCount = tRows[0]?.cnt || 0;
+    }
+    if (tablesList.includes('user_profiles')) {
+      const [uRows]: any = await connection.query('SELECT COUNT(*) as cnt FROM user_profiles');
+      userCount = uRows[0]?.cnt || 0;
+    }
+
+    await connection.end();
+
+    return res.json({
+      success: true,
+      message: 'Connected to MySQL Database Successfully!',
+      responseTimeMs: connectionTimeMs,
+      config: maskedConfig,
+      details: {
+        serverTime: pingRows[0]?.serverTime,
+        mysqlVersion: pingRows[0]?.mysqlVersion,
+        tablesFound: tablesList,
+        counts: {
+          products: productCount,
+          orders: orderCount,
+          tickets: ticketCount,
+          users: userCount,
+        },
+      },
+    });
+  } catch (err: any) {
+    if (connection) {
+      try { await connection.end(); } catch (e) {}
+    }
+
+    const responseTimeMs = Date.now() - startTime;
+    const errorCode = err.code || 'UNKNOWN_ERROR';
+    const errorMessage = err.message || String(err);
+    const errno = err.errno;
+    const sqlState = err.sqlState;
+
+    const suggestions: string[] = [];
+    if (errorCode === 'ECONNREFUSED') {
+      suggestions.push("Connection refused. On Hostinger web hosting/cPanel, set DB_HOST='localhost' or '127.0.0.1' instead of remote domain.");
+      suggestions.push("Check if port 3306 is correct and MySQL server is running.");
+    } else if (errorCode === 'ER_ACCESS_DENIED_ERROR') {
+      suggestions.push("Access denied. Verify database username and password in Hostinger hPanel > MySQL Databases.");
+      suggestions.push(`Ensure user '${user}' has been assigned ALL PRIVILEGES to database '${database}' in Hostinger.`);
+    } else if (errorCode === 'ER_BAD_DB_ERROR') {
+      suggestions.push(`Database '${database}' does not exist. Check exact database name in Hostinger MySQL Databases.`);
+    } else if (errorCode === 'ENOTFOUND') {
+      suggestions.push(`Host '${host}' could not be resolved. If hosted on Hostinger, use 'localhost'.`);
+    } else if (errorCode === 'ETIMEDOUT') {
+      suggestions.push("Connection timed out. Hostinger blocks remote connections from external IPs by default.");
+      suggestions.push("If connecting from outside Hostinger, add '%' or your server IP in Hostinger hPanel > Remote MySQL.");
+      suggestions.push("If app is hosted directly on Hostinger, set DB_HOST='localhost'.");
+    } else {
+      suggestions.push("Verify your Hostinger MySQL database credentials in hPanel > Databases.");
+      suggestions.push("Make sure MySQL user is created and assigned to the database.");
+    }
+
+    return res.status(200).json({
+      success: false,
+      message: `Database Connection Failed (${errorCode})`,
+      responseTimeMs,
+      config: maskedConfig,
+      error: {
+        code: errorCode,
+        errno,
+        sqlState,
+        message: errorMessage,
+      },
+      suggestions,
+    });
+  }
 });
 
 // Download SQL dump for Hostinger MySQL phpMyAdmin
