@@ -10,7 +10,7 @@ import {
 import { UserProfile, Product, Order, SupportTicket, WalletTransaction } from '../types';
 import { 
   getProducts, getOrders, saveOrders, getTickets, addTicket, addTicketMessage, saveTickets,
-  fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb, getProductsFromIndexedDB
+  fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb, getProductsFromIndexedDB, fetchNextProductsBatch
 } from '../lib/diamondDb';
 import { 
   calculateDiamondPrice, CALC_SHAPES, CALC_COLORS, CALC_CLARITIES, CalculationResult 
@@ -144,7 +144,7 @@ export default function CustomerStore({ currentUser, onUpdateCurrentUser, logoUr
       }
     }).catch(console.warn);
 
-    // 2. Fetch full catalog from MySQL DB
+    // 2. Fetch full catalog from Firestore DB
     fetchProductsFromDb().then(fresh => {
       if (fresh && fresh.length > 0) {
         setProducts(fresh);
@@ -280,6 +280,7 @@ export default function CustomerStore({ currentUser, onUpdateCurrentUser, logoUr
   // Notifications
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
+  const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
 
   const showToast = (msg: string, isErr = false) => {
     if (isErr) {
@@ -288,6 +289,23 @@ export default function CustomerStore({ currentUser, onUpdateCurrentUser, logoUr
     } else {
       setSuccessToast(msg);
       setTimeout(() => setSuccessToast(null), 3500);
+    }
+  };
+
+  const handleLoadNext100Products = async () => {
+    setIsLoadingNextBatch(true);
+    try {
+      const res = await fetchNextProductsBatch(100);
+      setProducts(res.products);
+      if (res.newCount > 0) {
+        showToast(`Loaded ${res.newCount} additional products from live Firestore! Total loaded: ${res.products.length}`);
+      } else {
+        showToast(`No more additional products found in Firestore.`);
+      }
+    } catch (err: any) {
+      showToast(`Failed to load next batch: ${err?.message || String(err)}`, true);
+    } finally {
+      setIsLoadingNextBatch(false);
     }
   };
 
@@ -1849,6 +1867,25 @@ export default function CustomerStore({ currentUser, onUpdateCurrentUser, logoUr
                         title="Next Page"
                       >
                         <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={handleLoadNext100Products}
+                        disabled={isLoadingNextBatch}
+                        className="ml-2 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:text-amber-300 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                        title="Fetch next batch of 100 products from live Firestore"
+                      >
+                        {isLoadingNextBatch ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                            Fetching...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5 text-amber-400" />
+                            Load Next 100 (Firestore)
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

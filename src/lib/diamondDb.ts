@@ -8,7 +8,10 @@ import {
   deleteDoc, 
   writeBatch,
   query,
-  limit
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData
 } from 'firebase/firestore';
 
 const INITIAL_PRODUCTS: Product[] = [
@@ -722,23 +725,27 @@ export function clearLocalProductCache(): void {
   clearIndexedDBAndCache().catch(console.error);
 }
 
-// Clear any existing cached products on load
-clearLocalProductCache();
+// Do not clear local product cache on load to ensure offline / quota fallback availability
 
 // --- Asynchronous Database Operations (Firestore Database ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b) ---
 
-// PRODUCTS (Firestore)
-export async function fetchProductsFromDb(): Promise<Product[]> {
-  // 0. Cache-First: Return from memory cache if available (0 Firestore reads)
-  if (cachedProducts && cachedProducts.length > 0) {
-    return cachedProducts;
-  }
+// Firestore product cursor pagination tracking
+let lastProductDocSnapshot: QueryDocumentSnapshot<DocumentData> | null = null;
+let hasMoreProductsFromDb = true;
 
-  // Check local IndexedDB cache first before hitting network (0 Firestore reads)
-  const dbList = await getProductsFromIndexedDB();
-  if (dbList.length > 0) {
-    cachedProducts = dbList;
-    return dbList;
+export function getHasMoreProductsFromDb(): boolean {
+  return hasMoreProductsFromDb;
+}
+
+export function resetProductPagination(): void {
+  lastProductDocSnapshot = null;
+  hasMoreProductsFromDb = true;
+}
+
+// PRODUCTS (Firestore)
+export async function fetchProductsFromDb(forceRefresh = false): Promise<Product[]> {
+  if (forceRefresh) {
+    resetProductPagination();
   }
 
   try {
@@ -746,6 +753,8 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
     const q = query(productsCol, limit(100));
     const snapshot = await getDocs(q);
     if (!snapshot.empty) {
+      lastProductDocSnapshot = snapshot.docs[snapshot.docs.length - 1];
+      hasMoreProductsFromDb = snapshot.docs.length === 100;
       const list: Product[] = snapshot.docs.map(d => d.data() as Product);
       cachedProducts = list;
       try {
@@ -770,13 +779,68 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
     }
   }
 
-  // Fallback to local IndexedDB or initial products
+  // Fallback to memory cache or IndexedDB or initial products if Firestore call fails
+  if (cachedProducts && cachedProducts.length > 0) {
+    return cachedProducts;
+  }
   const fallbackList = await getProductsFromIndexedDB();
   if (fallbackList.length > 0) {
     cachedProducts = fallbackList;
     return fallbackList;
   }
   return getProducts();
+}
+
+// Fetch the next batch of 100 products from live Firestore using startAfter cursor
+export async function fetchNextProductsBatch(batchSize = 100): Promise<{ products: Product[]; newCount: number; hasMore: boolean }> {
+  try {
+    const productsCol = collection(firestoreDb, 'products');
+    let q;
+    if (lastProductDocSnapshot) {
+      q = query(productsCol, startAfter(lastProductDocSnapshot), limit(batchSize));
+    } else {
+      q = query(productsCol, limit(batchSize));
+    }
+
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      lastProductDocSnapshot = snapshot.docs[snapshot.docs.length - 1];
+      const fetchedBatch: Product[] = snapshot.docs.map(d => d.data() as Product);
+      hasMoreProductsFromDb = snapshot.docs.length === batchSize;
+
+      // Merge newly fetched batch into existing cachedProducts without duplicates
+      const existingIds = new Set(cachedProducts.map(p => p.id));
+      const newlyAdded = fetchedBatch.filter(p => !existingIds.has(p.id));
+      cachedProducts = [...cachedProducts, ...newlyAdded];
+
+      try {
+        if (cachedProducts.length <= 1000) {
+          localStorage.setItem('phetmany_products', JSON.stringify(cachedProducts));
+        }
+      } catch (e) {}
+      await saveProductsToIndexedDB(cachedProducts);
+
+      return {
+        products: cachedProducts,
+        newCount: newlyAdded.length,
+        hasMore: hasMoreProductsFromDb
+      };
+    } else {
+      hasMoreProductsFromDb = false;
+      return {
+        products: cachedProducts,
+        newCount: 0,
+        hasMore: false
+      };
+    }
+  } catch (err) {
+    console.warn("Error loading next batch of products from Firestore:", err);
+    return {
+      products: cachedProducts,
+      newCount: 0,
+      hasMore: false
+    };
+  }
 }
 
 // Backward compatibility alias
@@ -832,6 +896,15 @@ export async function saveProductsToDbInBatches(
       onProgress(Math.round((current / total) * 100), current, total);
     }
   }
+
+  // Update memory and offline cache
+  cachedProducts = productsToSave;
+  try {
+    if (productsToSave.length <= 1000) {
+      localStorage.setItem('phetmany_products', JSON.stringify(productsToSave));
+    }
+  } catch (e) {}
+  saveProductsToIndexedDB(productsToSave).catch(console.error);
 }
 
 // Backward compatibility alias
@@ -840,6 +913,13 @@ export const saveProductsToFirestoreInBatches = saveProductsToDbInBatches;
 export async function deleteProductFromDb(id: string): Promise<void> {
   try {
     await deleteDoc(doc(firestoreDb, 'products', id));
+    if (cachedProducts) {
+      cachedProducts = cachedProducts.filter(p => p.id !== id);
+      try {
+        localStorage.setItem('phetmany_products', JSON.stringify(cachedProducts));
+      } catch (e) {}
+      saveProductsToIndexedDB(cachedProducts).catch(console.error);
+    }
   } catch (error) {
     console.error("Failed to delete product from Firestore:", error);
   }
@@ -933,14 +1013,22 @@ export function getProducts(): Product[] {
   }
   const local = localStorage.getItem('phetmany_products');
   if (!local) {
-    return cachedProducts || [];
+    cachedProducts = INITIAL_PRODUCTS;
+    try {
+      localStorage.setItem('phetmany_products', JSON.stringify(INITIAL_PRODUCTS));
+    } catch (e) {}
+    saveProductsToIndexedDB(INITIAL_PRODUCTS).catch(console.error);
+    return INITIAL_PRODUCTS;
   }
   try {
-    cachedProducts = JSON.parse(local);
-    return cachedProducts;
-  } catch (e) {
-    return [];
-  }
+    const parsed = JSON.parse(local);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      cachedProducts = parsed;
+      return parsed;
+    }
+  } catch (e) {}
+  cachedProducts = INITIAL_PRODUCTS;
+  return INITIAL_PRODUCTS;
 }
 
 export function saveProducts(products: Product[]): void {

@@ -518,20 +518,20 @@ export default function FirestoreConnectionTest({
           </span>
         </div>
 
-        {/* Hostinger Secondary DB Info */}
+        {/* Local Storage & IndexedDB Fallback Info */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
               <Server className="w-4 h-4 text-emerald-400" />
-              Secondary Connection
+              High-Speed Offline Cache
             </span>
-            <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono font-bold">Hostinger MySQL</span>
+            <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono font-bold">IndexedDB & LocalStorage</span>
           </div>
           <p className="text-[11px] text-slate-400 font-mono truncate">
-            u813732688_jewel database
+            Local browser persistent store
           </p>
           <span className="text-[10px] text-emerald-400 font-mono block truncate">
-            Status: Active Secondary Sync Backup
+            Status: Active Instant Fallback Engine
           </span>
         </div>
       </div>

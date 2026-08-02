@@ -13,7 +13,7 @@ import ThemeSelector from './ThemeSelector';
 import FirestoreConnectionTest from './FirestoreConnectionTest';
 import { 
   getProducts, saveProducts, getOrders, saveOrders, getTickets, addTicketMessage, saveTickets,
-  fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb,
+  fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb, fetchNextProductsBatch,
   saveProductsToDbInBatches, getProductsFromIndexedDB, clearIndexedDBAndCache
 } from '../lib/diamondDb';
 import { 
@@ -513,10 +513,29 @@ export default function AdminDashboard({
     try {
       const freshProducts = await fetchProductsFromDb();
       setProducts(freshProducts);
-      setSyncSuccess(`MySQL Database Refreshed! ${freshProducts.length} live products loaded from database.`);
+      setSyncSuccess(`GCP Firestore Database Refreshed! ${freshProducts.length} live products loaded from database.`);
       setTimeout(() => setSyncSuccess(null), 4000);
     } catch (err: any) {
       setImportError("Failed to fetch from Database: " + (err.message || String(err)));
+      setTimeout(() => setImportError(null), 5000);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleLoadNextBatch = async () => {
+    setSyncLoading(true);
+    try {
+      const res = await fetchNextProductsBatch(100);
+      setProducts(res.products);
+      if (res.newCount > 0) {
+        setSyncSuccess(`Loaded ${res.newCount} additional products from Firestore! Total loaded in memory: ${res.products.length}`);
+      } else {
+        setSyncSuccess(`No more additional products found in Firestore collection. Total loaded: ${res.products.length}`);
+      }
+      setTimeout(() => setSyncSuccess(null), 4000);
+    } catch (err: any) {
+      setImportError("Failed to fetch next batch: " + (err.message || String(err)));
       setTimeout(() => setImportError(null), 5000);
     } finally {
       setSyncLoading(false);
@@ -939,17 +958,17 @@ export default function AdminDashboard({
       showToast(`Successfully processed stock update! Synchronized ${productsToUpload.length} products to database.`);
     } catch (err) {
       console.error(err);
-      showToast("An error occurred during database upload. Some items may not have synced in MySQL.", true);
+      showToast("An error occurred during database upload. Some items may not have synced in Firestore.", true);
     } finally {
       setBatchUploadProgress(null);
     }
   };
 
-  // Apply the approved changes from the report to local storage / state and MySQL in batches
+  // Apply the approved changes from the report to local storage / state and Firestore in batches
   const handleApplyImport = async () => {
     if (!importReport) return;
 
-    // Collect all the items we actually need to write to MySQL
+    // Collect all the items we actually need to write to Firestore
     const productsToUpload: Product[] = [];
     
     // 1. Gather new products
@@ -1057,7 +1076,7 @@ export default function AdminDashboard({
       setProducts(freshProducts);
       setOrders(freshOrders);
       setTickets(freshTickets);
-      showToast('Dashboard variables synchronized with real-time MySQL database.');
+      showToast('Dashboard variables synchronized with real-time GCP Firestore database.');
     } catch (err) {
       console.error(err);
       setProducts(getProducts());
@@ -1789,7 +1808,7 @@ export default function AdminDashboard({
                 <div className="space-y-2">
                   <h4 className="text-sm font-black uppercase tracking-wider text-white">Database Synchronization In Progress</h4>
                   <p className="text-xs text-slate-400">
-                    Synchronizing imported diamond entries with your remote Hostinger MySQL database...
+                    Synchronizing imported diamond entries with your remote GCP Firestore database...
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -2165,20 +2184,29 @@ export default function AdminDashboard({
                     <h3 className="text-base sm:text-lg font-black text-white font-display tracking-wide uppercase">Loose Diamond Database</h3>
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                      MySQL Live ({products.length} Items)
+                      Firestore Live ({products.length} Items)
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">Database Engine: <code className="text-sky-400 font-mono text-[10px]">Hostinger MySQL Connected</code></p>
+                  <p className="text-xs text-slate-400">Database Engine: <code className="text-amber-400 font-mono text-[10px]">GCP Firestore Connected</code></p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button 
                     onClick={handleReloadFromDb}
                     disabled={syncLoading}
                     className="px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-slate-800 cursor-pointer transition-all"
-                    title="Fetch latest data directly from remote database"
+                    title="Fetch initial 100 products from remote database"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
                     Refresh Database
+                  </button>
+                  <button 
+                    onClick={handleLoadNextBatch}
+                    disabled={syncLoading}
+                    className="px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-800 cursor-pointer transition-all"
+                    title="Load next 100 products from live Firestore collection"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    Load Next 100 Products
                   </button>
                   <button 
                     onClick={() => { setShowImporter(!showImporter); setShowAddProduct(false); }}

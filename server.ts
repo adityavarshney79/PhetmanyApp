@@ -18,7 +18,7 @@ app.get('/api/health', async (_req, res) => {
     provider: 'Firestore Database',
     databaseId: 'ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b',
     timestamp: new Date().toISOString()
-  });
+  }); 
 });
 
 // Comprehensive Database Connection Diagnostic API (Firestore Primary)
@@ -34,6 +34,41 @@ app.all('/api/test-db-connection', async (_req, res) => {
       status: 'Active & Syncing'
     }
   });
+});
+
+// Gemini AI Proxy Endpoint (Server-Side Key Protection)
+app.post('/api/gemini/generate', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        error: 'GEMINI_API_KEY environment variable is not configured.'
+      });
+    }
+
+    const { prompt, model } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required.' });
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
+
+    const response = await ai.models.generateContent({
+      model: model || 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    res.json({
+      success: true,
+      text: response.text,
+    });
+  } catch (error: any) {
+    console.error('Gemini API Error:', error);
+    res.status(500).json({
+      error: error?.message || 'Failed to generate response from Gemini API',
+    });
+  }
 });
 
 async function startServer() {
