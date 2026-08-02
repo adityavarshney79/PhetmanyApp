@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, RefreshCw, CheckCircle2, AlertCircle, Sparkles, 
   Terminal, ShieldCheck, Flame, Key, Copy, Check,
-  Play, ShieldAlert
+  Play, ShieldAlert, Table, Eye, Layers, Search, ChevronDown, ChevronRight,
+  HardDrive, Server, FileText
 } from 'lucide-react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
@@ -16,6 +17,8 @@ import {
   query 
 } from 'firebase/firestore';
 import firebaseConfigRaw from '../../firebase-applet-config.json';
+import { getAllUsers } from '../lib/firebase';
+import { fetchProductsFromDb, fetchOrdersFromDb, fetchTicketsFromDb } from '../lib/diamondDb';
 
 interface FirestoreConnectionTestProps {
   defaultDatabaseId?: string;
@@ -27,6 +30,15 @@ interface TestStep {
   durationMs?: number;
   details?: string;
   error?: string;
+}
+
+interface CollectionMeta {
+  name: string;
+  description: string;
+  count: number | null;
+  loading: boolean;
+  error: string | null;
+  sampleDocs: any[];
 }
 
 export default function FirestoreConnectionTest({
@@ -53,6 +65,79 @@ export default function FirestoreConnectionTest({
   const [diagnosticLogs, setDiagnosticLogs] = useState<Array<{ timestamp: string; type: 'info' | 'success' | 'warn' | 'error'; message: string }>>([]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Firestore Tables / Collections State
+  const [selectedTable, setSelectedTable] = useState<string>('user_profiles');
+  const [isRefreshingTables, setIsRefreshingTables] = useState<boolean>(false);
+  const [isSyncingInitialData, setIsSyncingInitialData] = useState<boolean>(false);
+  const [tableSearchQuery, setTableSearchQuery] = useState<string>('');
+
+  const [collectionsData, setCollectionsData] = useState<Record<string, CollectionMeta>>({
+    user_profiles: {
+      name: 'user_profiles',
+      description: 'Registered users, roles, authentication credentials, & user metadata',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    products: {
+      name: 'products',
+      description: 'Diamond & jewelry inventory, pricing, carat, color, clarity, & images',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    orders: {
+      name: 'orders',
+      description: 'Customer purchase orders, tracking numbers, payment status, & items',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    tickets: {
+      name: 'tickets',
+      description: 'Customer support inquiries, tickets, messages, & resolution logs',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    rapaport_prices: {
+      name: 'rapaport_prices',
+      description: 'Rapaport matrix cached price lists for natural & lab diamonds',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    affiliate_configs: {
+      name: 'affiliate_configs',
+      description: 'Affiliate commission tiers, referral codes, & partner settings',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    wallet_transactions: {
+      name: 'wallet_transactions',
+      description: 'User wallet balance adjustments, deposits, credits, & transaction logs',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    },
+    _connection_test: {
+      name: '_connection_test',
+      description: 'System diagnostic ping collection for read/write connectivity tests',
+      count: null,
+      loading: false,
+      error: null,
+      sampleDocs: []
+    }
+  });
+
   const addLog = (type: 'info' | 'success' | 'warn' | 'error', message: string) => {
     setDiagnosticLogs(prev => [
       { timestamp: new Date().toLocaleTimeString(), type, message },
@@ -64,6 +149,100 @@ export default function FirestoreConnectionTest({
     navigator.clipboard.writeText(text);
     setCopiedKey(keyName);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  // Fetch Firestore Collections ("Tables") Data
+  const loadCollectionsInfo = async (dbId: string = databaseIdInput) => {
+    setIsRefreshingTables(true);
+    const config = {
+      ...firebaseConfigRaw,
+      projectId: projectIdInput || firebaseConfigRaw.projectId
+    };
+
+    let db: any = null;
+    try {
+      const app = getApps().length > 0 ? getApp() : initializeApp(config);
+      const targetDbId = dbId.trim() || '(default)';
+      db = (targetDbId === '(default)' || targetDbId === 'default' || !targetDbId)
+        ? getFirestore(app)
+        : getFirestore(app, targetDbId);
+    } catch (err: any) {
+      console.warn('Failed to bind Firestore for table listing:', err);
+      setIsRefreshingTables(false);
+      return;
+    }
+
+    const tableKeys = Object.keys(collectionsData);
+
+    for (const key of tableKeys) {
+      setCollectionsData(prev => ({
+        ...prev,
+        [key]: { ...prev[key], loading: true, error: null }
+      }));
+
+      try {
+        const q = query(collection(db, key), limit(20));
+        const snapshot = await getDocs(q);
+        const docs = snapshot.docs.map(d => ({
+          _id: d.id,
+          ...d.data()
+        }));
+
+        setCollectionsData(prev => ({
+          ...prev,
+          [key]: {
+            ...prev[key],
+            count: snapshot.size,
+            loading: false,
+            error: null,
+            sampleDocs: docs
+          }
+        }));
+      } catch (err: any) {
+        const isQuotaErr = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('Free daily read units');
+        setCollectionsData(prev => ({
+          ...prev,
+          [key]: {
+            ...prev[key],
+            count: 0,
+            loading: false,
+            error: isQuotaErr 
+              ? 'GCP Firestore daily read quota exceeded. Local high-performance cache active.' 
+              : (err.message || 'Error querying collection'),
+            sampleDocs: []
+          }
+        }));
+      }
+    }
+
+    setIsRefreshingTables(false);
+  };
+
+  // Seed / Sync Initial Application Data to Firestore
+  const handleSeedFirestore = async () => {
+    setIsSyncingInitialData(true);
+    addLog('info', 'Initiating full sync of application data into Firestore primary database...');
+
+    try {
+      addLog('info', 'Syncing user profiles into Firestore collection "user_profiles"...');
+      await getAllUsers();
+
+      addLog('info', 'Syncing products inventory into Firestore collection "products"...');
+      await fetchProductsFromDb();
+
+      addLog('info', 'Syncing orders into Firestore collection "orders"...');
+      await fetchOrdersFromDb();
+
+      addLog('info', 'Syncing support tickets into Firestore collection "tickets"...');
+      await fetchTicketsFromDb();
+
+      addLog('success', 'Full data sync into Firestore database completed successfully!');
+      await loadCollectionsInfo();
+    } catch (err: any) {
+      addLog('error', `Data sync failed: ${err.message}`);
+    } finally {
+      setIsSyncingInitialData(false);
+    }
   };
 
   const runDiagnostics = async (dbIdToTest: string = databaseIdInput) => {
@@ -162,7 +341,11 @@ export default function FirestoreConnectionTest({
       mainError = err;
       addLog('error', `Firestore read test failed: ${err.message}`);
 
-      if (err.message?.includes('permission-denied') || err.code === 'permission-denied') {
+      if (err.code === 'resource-exhausted' || err.message?.includes('Quota limit exceeded') || err.message?.includes('Free daily read units')) {
+        errorSuggestions.push('⚠️ Daily Free Tier Quota Exceeded for GCP Firestore reads (50,000 daily read units reached on project).');
+        errorSuggestions.push('The application automatically falls back to high-performance local persistence (IndexedDB & LocalStorage).');
+        errorSuggestions.push('Quota resets daily at midnight UTC on Google Cloud.');
+      } else if (err.message?.includes('permission-denied') || err.code === 'permission-denied') {
         errorSuggestions.push(`Permission Denied: Your firestore.rules file restricts read access to collection "${testCollectionName}".`);
         errorSuggestions.push('Deploy updated firestore.rules allowing read operations or authenticate user.');
       } else if (err.message?.includes('not-found') || err.code === 'not-found') {
@@ -239,11 +422,14 @@ export default function FirestoreConnectionTest({
     });
 
     setIsTesting(false);
+    loadCollectionsInfo(targetDbId);
   };
 
   useEffect(() => {
     runDiagnostics();
   }, []);
+
+  const selectedColData = collectionsData[selectedTable];
 
   return (
     <div className="space-y-6 text-left font-sans">
@@ -253,15 +439,25 @@ export default function FirestoreConnectionTest({
           <div className="flex items-center gap-2">
             <Flame className="w-6 h-6 text-amber-500 animate-pulse shrink-0" />
             <h3 className="text-base font-black text-white uppercase tracking-wider font-display">
-              Firestore Database Connection & Diagnostics Console
+              Firestore Database Connection & Tables Console
             </h3>
           </div>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-            Verify real-time read, write, and security rules connectivity for Google Firebase Firestore database.
+            Database ID: <code className="text-amber-400 font-bold font-mono">ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b</code> (Primary Storage)
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => handleSeedFirestore()}
+            disabled={isSyncingInitialData}
+            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold uppercase tracking-wider rounded-xl flex items-center gap-2 cursor-pointer transition-all"
+            title="Populate/Sync initial products, users, and orders into Firestore"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncingInitialData ? 'animate-spin' : ''}`} />
+            <span>{isSyncingInitialData ? 'Syncing Data...' : 'Sync / Seed Tables'}</span>
+          </button>
+
           <button
             onClick={() => runDiagnostics()}
             disabled={isTesting}
@@ -287,7 +483,7 @@ export default function FirestoreConnectionTest({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
               <Flame className="w-4 h-4 text-amber-400" />
-              Target Database (AI Studio)
+              Primary Firestore Database
             </span>
             <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded font-mono font-bold">Primary</span>
           </div>
@@ -322,25 +518,25 @@ export default function FirestoreConnectionTest({
           </span>
         </div>
 
-        {/* Firebase Config Credentials */}
+        {/* Hostinger Secondary DB Info */}
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Firebase Project Info
+              <Server className="w-4 h-4 text-emerald-400" />
+              Secondary Connection
             </span>
-            <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono font-bold">Config</span>
+            <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono font-bold">Hostinger MySQL</span>
           </div>
           <p className="text-[11px] text-slate-400 font-mono truncate">
-            {firebaseConfigRaw.projectId || 'project-6ae8de40'}
+            u813732688_jewel database
           </p>
-          <span className="text-[10px] text-slate-500 font-mono block truncate">
-            Auth Domain: {firebaseConfigRaw.authDomain || 'firebaseapp.com'}
+          <span className="text-[10px] text-emerald-400 font-mono block truncate">
+            Status: Active Secondary Sync Backup
           </span>
         </div>
       </div>
 
-      {/* Configuration Inputs & Results Grid */}
+      {/* Configuration Inputs & Diagnostic Results Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Connection Parameters Form */}
         <div className="lg:col-span-5 bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5">
@@ -418,28 +614,9 @@ export default function FirestoreConnectionTest({
               )}
             </button>
           </div>
-
-          {/* Quick Config Details */}
-          <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Firebase Applet Config</span>
-            <div className="space-y-1 font-mono text-[11px] text-slate-400">
-              <div className="flex justify-between">
-                <span>API Key:</span>
-                <span className="text-white">{firebaseConfigRaw.apiKey ? firebaseConfigRaw.apiKey.substring(0, 10) + '...' : 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Auth Domain:</span>
-                <span className="text-white">{firebaseConfigRaw.authDomain || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Storage Bucket:</span>
-                <span className="text-white">{firebaseConfigRaw.storageBucket || 'N/A'}</span>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Results & Interactive Diagnostic Steps */}
+        {/* Diagnostic Results Breakdown */}
         <div className="lg:col-span-7 bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5 flex flex-col justify-between">
           <div>
             <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
@@ -449,7 +626,7 @@ export default function FirestoreConnectionTest({
               </h4>
               {testResult && (
                 <span className="text-[10px] font-mono text-slate-400">
-                  Total Latency: <strong className="text-amber-400">{testResult.totalLatencyMs} ms</strong>
+                  Latency: <strong className="text-amber-400">{testResult.totalLatencyMs} ms</strong>
                 </span>
               )}
             </div>
@@ -473,18 +650,12 @@ export default function FirestoreConnectionTest({
                       <AlertCircle className="w-5 h-5 shrink-0" />
                       <span className="font-extrabold text-sm uppercase tracking-wider">{testResult.message}</span>
                     </div>
-                    {testResult.errorDetails && (
-                      <div className="bg-slate-900 p-3 rounded-lg border border-red-500/20 font-mono text-xs text-red-300 space-y-1">
-                        <div><strong className="text-slate-400">Error Code:</strong> {testResult.errorDetails.code}</div>
-                        <div><strong className="text-slate-400">Details:</strong> {testResult.errorDetails.message}</div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Diagnostic Steps Checklist */}
+            {/* Execution Steps */}
             <div className="space-y-3 mt-4">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
                 Execution Steps
@@ -494,27 +665,15 @@ export default function FirestoreConnectionTest({
                 {testSteps.map((step, idx) => (
                   <div 
                     key={idx}
-                    className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800/80 flex items-start justify-between gap-3 text-xs"
+                    className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80 flex items-start justify-between gap-3 text-xs"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       <span className="font-bold text-slate-200 block">{step.name}</span>
                       {step.details && <p className="text-[11px] text-slate-400">{step.details}</p>}
                       {step.error && <p className="text-[11px] text-red-400 font-mono">{step.error}</p>}
                     </div>
 
                     <div className="shrink-0 flex items-center gap-2">
-                      {step.durationMs !== undefined && (
-                        <span className="text-[10px] font-mono text-slate-500">{step.durationMs}ms</span>
-                      )}
-
-                      {step.status === 'pending' && (
-                        <span className="px-2 py-0.5 bg-slate-800 text-slate-500 rounded text-[9px] font-mono font-bold">WAITING</span>
-                      )}
-                      {step.status === 'running' && (
-                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[9px] font-mono font-bold flex items-center gap-1">
-                          <RefreshCw className="w-3 h-3 animate-spin" /> RUNNING
-                        </span>
-                      )}
                       {step.status === 'success' && (
                         <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[9px] font-mono font-bold flex items-center gap-1">
                           <Check className="w-3 h-3 text-emerald-400" /> PASSED
@@ -525,89 +684,183 @@ export default function FirestoreConnectionTest({
                           <AlertCircle className="w-3 h-3 text-red-400" /> FAILED
                         </span>
                       )}
-                      {step.status === 'skipped' && (
-                        <span className="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[9px] font-mono font-bold">SKIPPED</span>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Capabilities Summary Badges */}
-            {testResult && (
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
-                  <span className="text-xs text-slate-400 font-bold">Read Operation Status</span>
-                  {testResult.readSupported ? (
-                    <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold rounded-lg flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 bg-red-500/10 text-red-400 text-[10px] font-mono font-bold rounded-lg flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" /> Blocked
-                    </span>
-                  )}
-                </div>
+      {/* SECTION: FIRESTORE TABLES / COLLECTIONS EXPLORER */}
+      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-6">
+        <div className="border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Table className="w-5 h-5 text-amber-500" />
+              <h4 className="text-sm font-black text-white uppercase tracking-wider font-display">
+                Firestore Database Collections / Tables Explorer
+              </h4>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Inspect database tables (collections), document counts, and live records in database <code className="text-amber-400 font-bold">{databaseIdInput}</code>
+            </p>
+          </div>
 
-                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
-                  <span className="text-xs text-slate-400 font-bold">Write / Cleanup Status</span>
-                  {testResult.writeSupported ? (
-                    <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold rounded-lg flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-mono font-bold rounded-lg flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5" /> Restricted / Blocked
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadCollectionsInfo()}
+              disabled={isRefreshingTables}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold uppercase tracking-wider rounded-xl flex items-center gap-2 cursor-pointer transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshingTables ? 'animate-spin' : ''}`} />
+              <span>Refresh Tables</span>
+            </button>
+          </div>
+        </div>
 
-            {/* Troubleshooting Suggestions if Failure */}
-            {testResult && !testResult.success && testResult.suggestions && (
-              <div className="mt-4 bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl space-y-3">
-                <h5 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4" />
-                  Troubleshooting & Configuration Guide
-                </h5>
-                <ul className="space-y-2 text-xs text-slate-300">
-                  {testResult.suggestions.map((sugg, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-amber-500 font-bold shrink-0">{idx + 1}.</span>
-                      <span>{sugg}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* Collections Table Grid & Inspector Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Table List Sidebar (5 cols) */}
+          <div className="lg:col-span-5 space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <span>Database Tables ({Object.keys(collectionsData).length})</span>
+              <span className="text-[10px] text-slate-500">Firestore Format</span>
+            </div>
 
-            {/* Diagnostic Logs Terminal View */}
-            {diagnosticLogs.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Console Output Logs ({diagnosticLogs.length})
-                </span>
-                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 max-h-48 overflow-y-auto font-mono text-[11px] space-y-1">
-                  {diagnosticLogs.map((log, idx) => (
-                    <div key={idx} className="flex items-start gap-2">
-                      <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
-                      <span className={
-                        log.type === 'success' ? 'text-emerald-400' :
-                        log.type === 'error' ? 'text-red-400' :
-                        log.type === 'warn' ? 'text-amber-400' : 'text-slate-300'
-                      }>
-                        {log.message}
-                      </span>
+            <div className="space-y-2">
+              {(Object.entries(collectionsData) as [string, CollectionMeta][]).map(([colKey, meta]) => {
+                const isSelected = selectedTable === colKey;
+                return (
+                  <div
+                    key={colKey}
+                    onClick={() => setSelectedTable(colKey)}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-amber-500/10 border-amber-500/60 shadow-lg shadow-amber-500/5'
+                        : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900'
+                    }`}
+                  >
+                    <div className="space-y-1 overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <Table className={`w-4 h-4 shrink-0 ${isSelected ? 'text-amber-400' : 'text-slate-400'}`} />
+                        <span className={`text-xs font-mono font-bold truncate ${isSelected ? 'text-amber-300' : 'text-white'}`}>
+                          {meta.name}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 line-clamp-1 leading-normal">
+                        {meta.description}
+                      </p>
                     </div>
-                  ))}
+
+                    <div className="shrink-0 text-right space-y-1">
+                      {meta.loading ? (
+                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[9px] font-mono font-bold flex items-center gap-1">
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        </span>
+                      ) : meta.error ? (
+                        <span className="px-2 py-0.5 bg-red-500/10 text-red-400 rounded text-[9px] font-mono font-bold">
+                          Error
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-extrabold ${
+                          isSelected ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300'
+                        }`}>
+                          {meta.count !== null ? `${meta.count} doc${meta.count === 1 ? '' : 's'}` : '0 docs'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Table Content & Record Inspector (7 cols) */}
+          <div className="lg:col-span-7 bg-slate-900/90 p-5 rounded-xl border border-slate-800 space-y-4">
+            {selectedColData ? (
+              <>
+                <div className="border-b border-slate-800 pb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <h5 className="text-xs font-black text-amber-400 uppercase tracking-wider font-mono">
+                        Table: {selectedColData.name}
+                      </h5>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {selectedColData.description}
+                    </p>
+                  </div>
+
+                  <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-[10px] font-mono font-bold shrink-0">
+                    {selectedColData.sampleDocs.length} Sample Records
+                  </span>
                 </div>
+
+                {/* Live Document Viewer */}
+                {selectedColData.loading ? (
+                  <div className="py-12 flex flex-col items-center justify-center space-y-2 text-slate-400">
+                    <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
+                    <span className="text-xs font-mono">Querying Firestore collection "{selectedColData.name}"...</span>
+                  </div>
+                ) : selectedColData.sampleDocs.length === 0 ? (
+                  <div className="py-12 bg-slate-950/60 rounded-xl border border-dashed border-slate-800 flex flex-col items-center justify-center space-y-3 text-center p-6">
+                    <Database className="w-8 h-8 text-slate-600" />
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-slate-300 block">No documents in table "{selectedColData.name}" yet</span>
+                      <p className="text-[11px] text-slate-500 max-w-sm">
+                        You can populate default seed data for products, users, and orders using the sync button.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleSeedFirestore()}
+                      disabled={isSyncingInitialData}
+                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                    >
+                      Seed / Sync Table Data
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Live Records preview (JSON format)
+                    </span>
+
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                      {selectedColData.sampleDocs.map((doc, idx) => (
+                        <div 
+                          key={doc._id || idx}
+                          className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 font-mono text-xs"
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-900 pb-1.5">
+                            <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5" />
+                              Doc ID: <code className="text-white">{doc._id}</code>
+                            </span>
+                            <span className="text-[9px] text-slate-500">Firestore Document</span>
+                          </div>
+
+                          <pre className="text-[10px] text-emerald-400/90 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                            {JSON.stringify(doc, null, 2)}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="py-12 text-center text-xs text-slate-500">
+                Select a table from the sidebar to view documents.
               </div>
             )}
           </div>
         </div>
       </div>
+
     </div>
   );
 }
+

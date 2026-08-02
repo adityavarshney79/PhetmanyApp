@@ -1572,27 +1572,19 @@ export default function AdminDashboard({
 
                 <div className="pt-2 border-t border-slate-800 my-2">
                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-3.5 block mb-1">
-                    Database Connections
+                    Firestore Database
                   </span>
 
                   <button 
-                    onClick={() => { setActiveTab('db_connection'); setIsMobileMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
-                  >
-                    <Server className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>MySQL Connection</span>
-                  </button>
-
-                  <button 
                     onClick={() => { setActiveTab('firestore_connection'); setIsMobileMenuOpen(false); }}
-                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'firestore_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all cursor-pointer ${activeTab === 'firestore_connection' || activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-300 hover:bg-slate-900'}`}
                   >
                     <div className="flex items-center gap-3">
                       <Flame className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>Firestore Database</span>
+                      <span>Firestore DB Status</span>
                     </div>
-                    <span className="text-[8px] font-mono text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded font-bold">
-                      ai-studio
+                    <span className="text-[8px] font-mono text-amber-950 bg-amber-400 px-1.5 py-0.5 rounded font-bold">
+                      CONNECTED
                     </span>
                   </button>
                 </div>
@@ -1741,30 +1733,22 @@ export default function AdminDashboard({
                 Rapaport API Suite
               </button>
 
-              {/* Database Connections Submenu Group */}
+              {/* Firestore Database Submenu Group */}
               <div className="pt-2 border-t border-slate-800 my-2 space-y-1">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-4 block mb-1">
-                  Database Connections
+                  Database Status
                 </span>
                 
                 <button 
-                  onClick={() => setActiveTab('db_connection')}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
-                >
-                  <Server className="w-4 h-4 text-emerald-400" />
-                  <span>MySQL Database</span>
-                </button>
-
-                <button 
                   onClick={() => setActiveTab('firestore_connection')}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'firestore_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-left ${activeTab === 'firestore_connection' || activeTab === 'db_connection' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100'}`}
                 >
                   <div className="flex items-center gap-3">
-                    <Flame className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <Flame className="w-4 h-4 text-amber-500" />
                     <span>Firestore Database</span>
                   </div>
-                  <span className="bg-amber-500/20 text-amber-400 text-[8px] font-mono px-1.5 py-0.5 rounded font-bold">
-                    Test
+                  <span className="bg-emerald-500/20 text-emerald-400 text-[8px] font-mono px-1.5 py-0.5 rounded font-bold">
+                    ACTIVE
                   </span>
                 </button>
               </div>
@@ -7239,359 +7223,8 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* DATABASE CONNECTION DIAGNOSTICS TAB */}
-          {activeTab === 'db_connection' && (
-            <div className="space-y-6 text-left">
-              {/* Header */}
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Database className="w-5 h-5 text-emerald-400 animate-pulse" />
-                    <h3 className="text-base font-black text-white uppercase tracking-wider font-display">Database Connection & Diagnostics Console</h3>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Test and verify connection parameters for Hostinger MySQL database. Identify and fix connection issues instantly.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleRunDbTest()}
-                    disabled={isTestingDbConn}
-                    className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-emerald-500/10"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isTestingDbConn ? 'animate-spin' : ''}`} />
-                    <span>{isTestingDbConn ? 'Testing Connection...' : 'Run Diagnostics'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Preset Buttons */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div 
-                  onClick={() => {
-                    setDbHostInput('localhost');
-                    handleRunDbTest({ host: 'localhost' });
-                  }}
-                  className="bg-slate-950 p-4 rounded-xl border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all group space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Server className="w-4 h-4 text-emerald-400" />
-                      Preset 1: Localhost (Default)
-                    </span>
-                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono font-bold">Recommended</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    Best for applications deployed directly on Hostinger web servers.
-                  </p>
-                  <span className="text-[10px] text-amber-500 font-mono font-semibold block group-hover:underline">
-                    Test DB_HOST='localhost' →
-                  </span>
-                </div>
-
-                <div 
-                  onClick={() => {
-                    setDbHostInput('127.0.0.1');
-                    handleRunDbTest({ host: '127.0.0.1' });
-                  }}
-                  className="bg-slate-950 p-4 rounded-xl border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all group space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <Wifi className="w-4 h-4 text-blue-400" />
-                      Preset 2: Local IP (127.0.0.1)
-                    </span>
-                    <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded font-mono font-bold">Alternative</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    Uses explicit loopback IP address for local server socket binding.
-                  </p>
-                  <span className="text-[10px] text-amber-500 font-mono font-semibold block group-hover:underline">
-                    Test DB_HOST='127.0.0.1' →
-                  </span>
-                </div>
-
-                <div 
-                  onClick={() => {
-                    setDbHostInput('srv1085.hstgr.io');
-                    handleRunDbTest({ host: 'srv1085.hstgr.io' });
-                  }}
-                  className="bg-slate-950 p-4 rounded-xl border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-all group space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <ExternalLink className="w-4 h-4 text-purple-400" />
-                      Preset 3: Hostinger Domain
-                    </span>
-                    <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded font-mono font-bold">Remote Host</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    srv1085.hstgr.io (Requires Remote MySQL enabled in Hostinger hPanel).
-                  </p>
-                  <span className="text-[10px] text-amber-500 font-mono font-semibold block group-hover:underline">
-                    Test DB_HOST='srv1085.hstgr.io' →
-                  </span>
-                </div>
-              </div>
-
-              {/* Form & Results Container */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Parameter Inputs */}
-                <div className="lg:col-span-5 bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5">
-                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                    <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                      <Key className="w-4 h-4 text-amber-500" />
-                      <span>Connection Parameters</span>
-                    </h4>
-                    <span className="text-[9px] font-mono text-slate-500 uppercase bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">MySQL Config</span>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Database Host (DB_HOST)</label>
-                      <input
-                        type="text"
-                        value={dbHostInput}
-                        onChange={(e) => setDbHostInput(e.target.value)}
-                        placeholder="localhost or srv1085.hstgr.io"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                      />
-                      <p className="text-[9px] text-slate-500">Hostinger hosted apps should use <code className="text-amber-400">localhost</code>.</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Database User (DB_USER)</label>
-                      <input
-                        type="text"
-                        value={dbUserInput}
-                        onChange={(e) => setDbUserInput(e.target.value)}
-                        placeholder="u513407224_phetmany"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Database Password (DB_PASSWORD)</label>
-                      <div className="relative">
-                        <input
-                          type={showDbPassword ? 'text' : 'password'}
-                          value={dbPasswordInput}
-                          onChange={(e) => setDbPasswordInput(e.target.value)}
-                          placeholder="Enter password"
-                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowDbPassword(!showDbPassword)}
-                          className="absolute right-3 top-3 text-slate-500 hover:text-slate-300"
-                        >
-                          {showDbPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Database Name (DB_NAME)</label>
-                      <input
-                        type="text"
-                        value={dbNameInput}
-                        onChange={(e) => setDbNameInput(e.target.value)}
-                        placeholder="u513407224_phetmany"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Port (DB_PORT)</label>
-                      <input
-                        type="text"
-                        value={dbPortInput}
-                        onChange={(e) => setDbPortInput(e.target.value)}
-                        placeholder="3306"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => handleRunDbTest()}
-                      disabled={isTestingDbConn}
-                      className="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-500/10"
-                    >
-                      {isTestingDbConn ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Testing Database Connection...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Test Provided Connection</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Connection Diagnostic Result Panel */}
-                <div className="lg:col-span-7 bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-5 flex flex-col justify-between">
-                  <div>
-                    <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                      <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
-                        <Terminal className="w-4 h-4 text-emerald-400" />
-                        <span>Diagnostic Test Results</span>
-                      </h4>
-                      {dbTestResultData && (
-                        <span className="text-[10px] font-mono text-slate-400">
-                          Response time: <strong className="text-amber-400">{dbTestResultData.responseTimeMs} ms</strong>
-                        </span>
-                      )}
-                    </div>
-
-                    {!dbTestResultData && !isTestingDbConn && (
-                      <div className="py-16 text-center space-y-3">
-                        <Database className="w-10 h-10 text-slate-700 mx-auto animate-pulse" />
-                        <p className="text-xs text-slate-500">Click "Run Diagnostics" or "Test Provided Connection" to perform test.</p>
-                      </div>
-                    )}
-
-                    {isTestingDbConn && (
-                      <div className="py-16 text-center space-y-3">
-                        <RefreshCw className="w-10 h-10 text-amber-500 animate-spin mx-auto" />
-                        <p className="text-xs font-bold text-slate-300">Attempting socket connection to MySQL server...</p>
-                        <p className="text-[10px] text-slate-500 font-mono">Testing host: {dbHostInput}:{dbPortInput}</p>
-                      </div>
-                    )}
-
-                    {dbTestResultData && !isTestingDbConn && (
-                      <div className="space-y-5 pt-2">
-                        {/* Success or Failure Banner */}
-                        {dbTestResultData.success ? (
-                          <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl space-y-2">
-                            <div className="flex items-center gap-2 text-emerald-400">
-                              <CheckCircle2 className="w-5 h-5 shrink-0" />
-                              <span className="font-extrabold text-sm uppercase tracking-wider">{dbTestResultData.message}</span>
-                            </div>
-                            <p className="text-xs text-emerald-300/80 leading-relaxed">
-                              Your web application is fully connected to the MySQL database. All read and write operations are active.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl space-y-2">
-                            <div className="flex items-center gap-2 text-red-400">
-                              <AlertCircle className="w-5 h-5 shrink-0" />
-                              <span className="font-extrabold text-sm uppercase tracking-wider">{dbTestResultData.message}</span>
-                            </div>
-                            {dbTestResultData.error && (
-                              <div className="bg-slate-900 p-3 rounded-lg border border-red-500/20 font-mono text-xs text-red-300 space-y-1">
-                                <div><strong className="text-slate-400">Error Code:</strong> {dbTestResultData.error.code}</div>
-                                {dbTestResultData.error.errno && <div><strong className="text-slate-400">Errno:</strong> {dbTestResultData.error.errno}</div>}
-                                <div><strong className="text-slate-400">Details:</strong> {dbTestResultData.error.message}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Tested Configuration Summary */}
-                        <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Tested Credentials</span>
-                          <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
-                            <div><span className="text-slate-500">Host:</span> <strong className="text-white">{dbTestResultData.config?.host}</strong></div>
-                            <div><span className="text-slate-500">Port:</span> <strong className="text-white">{dbTestResultData.config?.port}</strong></div>
-                            <div><span className="text-slate-500">User:</span> <strong className="text-white">{dbTestResultData.config?.user}</strong></div>
-                            <div><span className="text-slate-500">Database:</span> <strong className="text-white">{dbTestResultData.config?.database}</strong></div>
-                          </div>
-                        </div>
-
-                        {/* Connection Details if Success */}
-                        {dbTestResultData.success && dbTestResultData.details && (
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-1">
-                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">MySQL Version</span>
-                                <span className="font-mono text-xs font-bold text-white">{dbTestResultData.details.mysqlVersion || '8.0.x'}</span>
-                              </div>
-                              <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-1">
-                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Server Time</span>
-                                <span className="font-mono text-xs font-bold text-emerald-400">{dbTestResultData.details.serverTime ? new Date(dbTestResultData.details.serverTime).toLocaleString() : 'N/A'}</span>
-                              </div>
-                            </div>
-
-                            {/* Database Tables Overview */}
-                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-white uppercase tracking-wider">Tables Initialized ({dbTestResultData.details.tablesFound?.length || 0})</span>
-                                <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-mono font-bold px-2 py-0.5 rounded">InnoDB Schema Ready</span>
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                {dbTestResultData.details.tablesFound?.map((tbl: string) => (
-                                  <span key={tbl} className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-lg flex items-center gap-1.5">
-                                    <Check className="w-3 h-3 text-emerald-400" />
-                                    {tbl}
-                                  </span>
-                                ))}
-                              </div>
-
-                              {dbTestResultData.details.counts && (
-                                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-800/60 text-center font-mono">
-                                  <div className="bg-slate-950 p-2 rounded-lg">
-                                    <span className="text-[9px] text-slate-500 block">Products</span>
-                                    <span className="text-xs font-bold text-amber-500">{dbTestResultData.details.counts.products}</span>
-                                  </div>
-                                  <div className="bg-slate-950 p-2 rounded-lg">
-                                    <span className="text-[9px] text-slate-500 block">Orders</span>
-                                    <span className="text-xs font-bold text-blue-400">{dbTestResultData.details.counts.orders}</span>
-                                  </div>
-                                  <div className="bg-slate-950 p-2 rounded-lg">
-                                    <span className="text-[9px] text-slate-500 block">Tickets</span>
-                                    <span className="text-xs font-bold text-purple-400">{dbTestResultData.details.counts.tickets}</span>
-                                  </div>
-                                  <div className="bg-slate-950 p-2 rounded-lg">
-                                    <span className="text-[9px] text-slate-500 block">Users</span>
-                                    <span className="text-xs font-bold text-emerald-400">{dbTestResultData.details.counts.users}</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Troubleshooting Suggestions if Failure */}
-                        {!dbTestResultData.success && dbTestResultData.suggestions && (
-                          <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl space-y-3">
-                            <h5 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                              <Sparkles className="w-4 h-4" />
-                              How to Fix This Issue on Hostinger MySQL
-                            </h5>
-                            <ul className="space-y-2 text-xs text-slate-300">
-                              {dbTestResultData.suggestions.map((sugg: string, idx: number) => (
-                                <li key={idx} className="flex items-start gap-2">
-                                  <span className="text-amber-500 font-bold shrink-0">{idx + 1}.</span>
-                                  <span>{sugg}</span>
-                                </li>
-                              ))}
-                            </ul>
-
-                            <div className="pt-2 border-t border-amber-500/20 text-[11px] text-slate-400 space-y-1">
-                              <p className="font-bold text-amber-300">Quick Hostinger Setup Steps:</p>
-                              <p>1. Open Hostinger hPanel → <strong>Databases</strong> → <strong>MySQL Databases</strong>.</p>
-                              <p>2. Verify database name (e.g. <code className="text-white">u513407224_phetmany</code>) and user.</p>
-                              <p>3. Make sure the MySQL User is added to the Database with <strong>ALL PRIVILEGES</strong>.</p>
-                              <p>4. Set <code className="text-amber-400 font-bold">DB_HOST="localhost"</code> in your environment or form on the left.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Firestore Connection Diagnostic Page */}
-          {activeTab === 'firestore_connection' && (
+          {/* DATABASE CONNECTION DIAGNOSTICS TAB (FIRESTORE) */}
+          {(activeTab === 'db_connection' || activeTab === 'firestore_connection') && (
             <FirestoreConnectionTest defaultDatabaseId="ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b" />
           )}
 

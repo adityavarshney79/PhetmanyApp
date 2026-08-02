@@ -6,7 +6,9 @@ import {
   getDocs, 
   setDoc, 
   deleteDoc, 
-  writeBatch 
+  writeBatch,
+  query,
+  limit
 } from 'firebase/firestore';
 
 const INITIAL_PRODUCTS: Product[] = [
@@ -723,67 +725,26 @@ export function clearLocalProductCache(): void {
 // Clear any existing cached products on load
 clearLocalProductCache();
 
-// --- Asynchronous Database Operations (Primary: Firestore Database ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b, Secondary: Hostinger MySQL API) ---
+// --- Asynchronous Database Operations (Firestore Database ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b) ---
 
-// Helper: Secondary Sync functions for Hostinger MySQL API
-async function syncProductToSecondaryDb(product: Product): Promise<void> {
-  try {
-    await fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product)
-    });
-  } catch (err) {
-    console.warn('Hostinger MySQL secondary sync notice:', err);
-  }
-}
-
-async function syncProductsBatchToSecondaryDb(productsChunk: Product[]): Promise<void> {
-  try {
-    await fetch('/api/products/batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ products: productsChunk })
-    });
-  } catch (err) {
-    console.warn('Hostinger MySQL secondary batch sync notice:', err);
-  }
-}
-
-async function syncProductDeleteToSecondaryDb(id: string): Promise<void> {
-  try {
-    await fetch(`/api/products/${id}`, { method: 'DELETE' });
-  } catch (err) {
-    console.warn('Hostinger MySQL secondary delete notice:', err);
-  }
-}
-
-async function syncOrderToSecondaryDb(order: Order): Promise<void> {
-  try {
-    await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(order)
-    });
-  } catch (err) {}
-}
-
-async function syncTicketToSecondaryDb(ticket: SupportTicket): Promise<void> {
-  try {
-    await fetch('/api/tickets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ticket)
-    });
-  } catch (err) {}
-}
-
-// PRODUCTS (Primary: Firestore, Secondary: Hostinger MySQL)
+// PRODUCTS (Firestore)
 export async function fetchProductsFromDb(): Promise<Product[]> {
-  // 1. Primary: Firestore Collection "products"
+  // 0. Cache-First: Return from memory cache if available (0 Firestore reads)
+  if (cachedProducts && cachedProducts.length > 0) {
+    return cachedProducts;
+  }
+
+  // Check local IndexedDB cache first before hitting network (0 Firestore reads)
+  const dbList = await getProductsFromIndexedDB();
+  if (dbList.length > 0) {
+    cachedProducts = dbList;
+    return dbList;
+  }
+
   try {
     const productsCol = collection(firestoreDb, 'products');
-    const snapshot = await getDocs(productsCol);
+    const q = query(productsCol, limit(100));
+    const snapshot = await getDocs(q);
     if (!snapshot.empty) {
       const list: Product[] = snapshot.docs.map(d => d.data() as Product);
       cachedProducts = list;
@@ -797,39 +758,23 @@ export async function fetchProductsFromDb(): Promise<Product[]> {
     }
 
     // Seed Firestore if products collection is empty
-    console.log('Firestore products collection empty. Seeding initial products...');
+    console.log('Firestore products collection empty. Seeding initial products into ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b...');
     await saveProductsToDbInBatches(INITIAL_PRODUCTS);
     cachedProducts = INITIAL_PRODUCTS;
     return INITIAL_PRODUCTS;
-  } catch (e) {
-    console.warn("Firestore fetch products error, trying Hostinger MySQL secondary connection:", e);
-  }
-
-  // 2. Secondary Fallback: Hostinger MySQL API Endpoint
-  try {
-    const res = await fetch('/api/products');
-    if (res.ok) {
-      const list: Product[] = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
-        cachedProducts = list;
-        try {
-          if (list.length <= 1000) {
-            localStorage.setItem('phetmany_products', JSON.stringify(list));
-          }
-        } catch (e) {}
-        await saveProductsToIndexedDB(list);
-        return list;
-      }
+  } catch (e: any) {
+    if (e?.code === 'resource-exhausted' || e?.message?.includes('Quota limit exceeded') || e?.message?.includes('Free daily read units')) {
+      console.warn("⚠️ GCP Firestore free tier daily read quota limit reached (50,000 daily read units). Falling back to IndexedDB/LocalStorage cache.");
+    } else {
+      console.warn("Firestore fetch products error, relying on cache/IndexedDB:", e);
     }
-  } catch (e) {
-    console.warn("MySQL API fetch products error:", e);
   }
 
-  // 3. Fallback to local IndexedDB or initial products
-  const dbList = await getProductsFromIndexedDB();
-  if (dbList.length > 0) {
-    cachedProducts = dbList;
-    return dbList;
+  // Fallback to local IndexedDB or initial products
+  const fallbackList = await getProductsFromIndexedDB();
+  if (fallbackList.length > 0) {
+    cachedProducts = fallbackList;
+    return fallbackList;
   }
   return getProducts();
 }
@@ -871,7 +816,6 @@ export async function saveProductsToDbInBatches(
   for (let i = 0; i < total; i += batchSize) {
     const chunk = productsToSave.slice(i, i + batchSize);
 
-    // 1. Primary: Save directly to Firestore using writeBatch
     try {
       const batch = writeBatch(firestoreDb);
       for (const prod of chunk) {
@@ -882,9 +826,6 @@ export async function saveProductsToDbInBatches(
     } catch (err) {
       console.warn('Firestore batch save error:', err);
     }
-
-    // 2. Secondary: Sync to Hostinger MySQL API in background
-    syncProductsBatchToSecondaryDb(chunk);
 
     current += chunk.length;
     if (onProgress) {
@@ -897,21 +838,17 @@ export async function saveProductsToDbInBatches(
 export const saveProductsToFirestoreInBatches = saveProductsToDbInBatches;
 
 export async function deleteProductFromDb(id: string): Promise<void> {
-  // 1. Primary: Delete from Firestore
   try {
     await deleteDoc(doc(firestoreDb, 'products', id));
   } catch (error) {
     console.error("Failed to delete product from Firestore:", error);
   }
-
-  // 2. Secondary: Delete from Hostinger MySQL
-  syncProductDeleteToSecondaryDb(id);
 }
 
 // Backward compatibility alias
 export const deleteProductFromFirestore = deleteProductFromDb;
 
-// ORDERS (Primary: Firestore, Secondary: Hostinger MySQL)
+// ORDERS (Firestore)
 export async function fetchOrdersFromDb(): Promise<Order[]> {
   try {
     const ordersCol = collection(firestoreDb, 'orders');
@@ -923,25 +860,11 @@ export async function fetchOrdersFromDb(): Promise<Order[]> {
     }
 
     // Seed Firestore if empty
-    console.log('Firestore orders empty. Seeding initial orders...');
+    console.log('Firestore orders empty. Seeding initial orders into ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b...');
     await saveOrdersToDb(INITIAL_ORDERS);
     return INITIAL_ORDERS;
   } catch (e) {
-    console.warn("Firestore fetch orders error, trying Hostinger MySQL:", e);
-  }
-
-  // Secondary: Hostinger MySQL
-  try {
-    const res = await fetch('/api/orders');
-    if (res.ok) {
-      const list: Order[] = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
-        localStorage.setItem('phetmany_orders', JSON.stringify(list));
-        return list;
-      }
-    }
-  } catch (error) {
-    console.warn("MySQL fetch orders error:", error);
+    console.warn("Firestore fetch orders error:", e);
   }
 
   return getOrders();
@@ -952,22 +875,18 @@ export const fetchOrdersFromFirestore = fetchOrdersFromDb;
 
 export async function saveOrdersToDb(orders: Order[]): Promise<void> {
   for (const o of orders) {
-    // Primary: Firestore
     try {
       await setDoc(doc(firestoreDb, 'orders', o.id), o);
     } catch (e) {
       console.warn('Firestore save order error:', e);
     }
-
-    // Secondary: Hostinger MySQL
-    syncOrderToSecondaryDb(o);
   }
 }
 
 // Backward compatibility alias
 export const saveOrdersToFirestore = saveOrdersToDb;
 
-// TICKETS (Primary: Firestore, Secondary: Hostinger MySQL)
+// TICKETS (Firestore)
 export async function fetchTicketsFromDb(): Promise<SupportTicket[]> {
   try {
     const ticketsCol = collection(firestoreDb, 'tickets');
@@ -979,24 +898,12 @@ export async function fetchTicketsFromDb(): Promise<SupportTicket[]> {
     }
 
     // Seed Firestore if empty
-    console.log('Firestore tickets empty. Seeding initial support tickets...');
+    console.log('Firestore tickets empty. Seeding initial support tickets into ai-studio-9d165634-d14e-4de4-a345-bb74bfdf950b...');
     await saveTicketsToDb(INITIAL_TICKETS);
     return INITIAL_TICKETS;
   } catch (e) {
-    console.warn("Firestore fetch tickets error, trying Hostinger MySQL:", e);
+    console.warn("Firestore fetch tickets error:", e);
   }
-
-  // Secondary: Hostinger MySQL
-  try {
-    const res = await fetch('/api/tickets');
-    if (res.ok) {
-      const list: SupportTicket[] = await res.json();
-      if (Array.isArray(list) && list.length > 0) {
-        localStorage.setItem('phetmany_tickets', JSON.stringify(list));
-        return list;
-      }
-    }
-  } catch (error) {}
 
   return getTickets();
 }
@@ -1006,15 +913,11 @@ export const fetchTicketsFromFirestore = fetchTicketsFromDb;
 
 export async function saveTicketsToDb(tickets: SupportTicket[]): Promise<void> {
   for (const t of tickets) {
-    // Primary: Firestore
     try {
       await setDoc(doc(firestoreDb, 'tickets', t.id), t);
     } catch (e) {
       console.warn('Firestore save ticket error:', e);
     }
-
-    // Secondary: Hostinger MySQL
-    syncTicketToSecondaryDb(t);
   }
 }
 
@@ -1022,7 +925,7 @@ export async function saveTicketsToDb(tickets: SupportTicket[]): Promise<void> {
 export const saveTicketsToFirestore = saveTicketsToDb;
 
 
-// --- Synchronous Storage Interfaces (Backward Compatible, Syncs to MySQL in background) ---
+// --- Synchronous Storage Interfaces (Syncs to Firestore in background) ---
 
 export function getProducts(): Product[] {
   if (cachedProducts && cachedProducts.length > 0) {
@@ -1048,6 +951,7 @@ export function saveProducts(products: Product[]): void {
     console.warn("localStorage quota exceeded in saveProducts, relying on memory and IndexedDB:", e);
   }
   saveProductsToIndexedDB(products).catch(console.error);
+  saveProductsToDbInBatches(products).catch(console.error);
 }
 
 export function addProduct(product: Product): void {
@@ -1060,11 +964,7 @@ export function addProduct(product: Product): void {
     console.warn("localStorage quota exceeded in addProduct, relying on memory and IndexedDB:", e);
   }
   saveProductsToIndexedDB(products).catch(console.error);
-  fetch('/api/products', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(product)
-  }).catch(console.error);
+  setDoc(doc(firestoreDb, 'products', product.id), product).catch(console.error);
 }
 
 export function updateProduct(id: string, updates: Partial<Product>): void {
@@ -1080,11 +980,7 @@ export function updateProduct(id: string, updates: Partial<Product>): void {
       console.warn("localStorage quota exceeded in updateProduct, relying on memory and IndexedDB:", e);
     }
     saveProductsToIndexedDB(products).catch(console.error);
-    fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated)
-    }).catch(console.error);
+    setDoc(doc(firestoreDb, 'products', id), updated, { merge: true }).catch(console.error);
   }
 }
 
@@ -1176,4 +1072,5 @@ export function addTicketMessage(ticketId: string, text: string, sender: 'user' 
     saveTickets(tickets);
   }
 }
+
 
